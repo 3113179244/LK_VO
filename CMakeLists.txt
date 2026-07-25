@@ -13,6 +13,8 @@ find_package(Ceres REQUIRED)
 find_package(Eigen3 REQUIRED)
 find_package(Sophus REQUIRED)
 find_package(Pangolin REQUIRED)
+find_package(OpenGL REQUIRED)
+find_package(GLEW REQUIRED)
 
 include_directories(
   src
@@ -22,6 +24,7 @@ include_directories(
   ${CERES_INCLUDE_DIRS}
   ${Sophus_INCLUDE_DIRS}
   ${PANGOLIN_INCLUDE_DIRS}
+  ${OPENGL_INCLUDE_DIR}
 )
 
 add_library(${PROJECT_NAME}_lib
@@ -36,13 +39,17 @@ add_library(${PROJECT_NAME}_lib
   src/Optimizer.cpp
   src/System.cpp
   src/Tracker.cpp
-  # src/Viewer.cpp
+  src/Viewer.cpp
 )
 
 target_link_libraries(${PROJECT_NAME}_lib
   ${OpenCV_LIBS}
   ${CERES_LIBRARIES}
   Sophus::Sophus
+  pango_display        
+  ${OPENGL_LIBRARIES}
+  GLEW::GLEW
+  pthread
 )
 
 add_executable(LK_VO src/main.cpp)

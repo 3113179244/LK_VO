@@ -99,3 +99,15 @@ void Viewer::DrawKeyFrames()
         Eigen::Matrix4f Twc = Tcw.inverse(); // 从 Tcw 获取 Twc 以渲染相机在世界坐标系的姿态
     }
 }
+
+void Viewer::RequestFinish()
+{
+    std::unique_lock<std::mutex> lock(mMutexFinish);
+    mbFinishRequested = true;
+}
+
+bool Viewer::isFinished()
+{
+    std::unique_lock<std::mutex> lock(mMutexFinish);
+    return mbFinished;
+}

@@ -8,7 +8,6 @@ Frame::Frame(const cv::Mat &imLeft, const cv::Mat &imRight, const double timesta
       mTcw(Eigen::Matrix4f::Identity()) 
 {
     mbf = camera->mBaseline * camera->fx;
-    mThDepth = camera->mBaseline * 35.0f;
 }
 
 void Frame::SetPose(const Eigen::Matrix4f &Tcw)

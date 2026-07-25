@@ -1,15 +1,15 @@
 #include "FeatureDetector.h"
 #include "Config.h" 
 
-int FeatureTracker::nextFeatureId = 0;
+int FeatureDetector::nextFeatureId = 0;
 
-FeatureTracker::FeatureTracker()
+FeatureDetector::FeatureDetector()
 {
     maxFeatures = Config::get<int>("max_cnt");
     minFeatureDist = Config::get<int>("min_dist");
 }
 
-void FeatureTracker::TrackImage(const double &timestamp, const cv::Mat &_currImgLeft, const cv::Mat &_currImgRight)
+void FeatureDetector::TrackImage(const double &timestamp, const cv::Mat &_currImgLeft, const cv::Mat &_currImgRight)
 {
     currImgLeft = _currImgLeft;
     currImgRight = _currImgRight;
@@ -35,29 +35,14 @@ void FeatureTracker::TrackImage(const double &timestamp, const cv::Mat &_currImg
     prevPtsLeft = currPtsLeft;
 }
 
-std::vector<TrackedFeature> FeatureTracker::GetCurrentTrackedFeatures() const
-{
-    std::vector<TrackedFeature> features;
-    for (size_t i = 0; i < currPtsLeft.size(); i++)
-    {
-        TrackedFeature f;
-        f.id = trackIds[i];
-        f.ptLeft = currPtsLeft[i];
-        if (i < currPtsRight.size())
-            f.ptRight = currPtsRight[i];
-        f.trackCount = trackCnt[i];
-        features.push_back(f);
-    }
-    return features;
-}
+// （注：原 GetCurrentFeatureDetectors 函数已删除，直接使用下面的 Getter 取数据）
 
-void FeatureTracker::TrackTemporal()
+void FeatureDetector::TrackTemporal()
 {
     std::vector<uchar> status;
     std::vector<float> err;
     cv::calcOpticalFlowPyrLK(prevImgLeft, currImgLeft, prevPtsLeft, currPtsLeft, status, err, cv::Size(21, 21), 3);
 
-    // 筛选出追踪成功的点
     std::vector<cv::Point2f> goodPts;
     std::vector<int> goodIds;
     std::vector<int> goodCnt;
@@ -75,25 +60,23 @@ void FeatureTracker::TrackTemporal()
     trackCnt = goodCnt;
 }
 
-void FeatureTracker::TrackStereo()
+void FeatureDetector::TrackStereo()
 {
     std::vector<uchar> status;
     std::vector<float> err;
     cv::calcOpticalFlowPyrLK(currImgLeft, currImgRight, currPtsLeft, currPtsRight, status, err, cv::Size(21, 21), 3);
-    // 这里可进一步处理左右眼由于极线约束未对齐的异常点
 }
 
-void FeatureTracker::RejectOutliers()
+void FeatureDetector::RejectOutliers()
 {
     if (currPtsLeft.size() >= 8 && currPtsRight.size() >= 8)
     {
         std::vector<uchar> status;
         cv::findFundamentalMat(currPtsLeft, currPtsRight, cv::FM_RANSAC, 3.0, 0.99, status);
-        // 根据 status 去除外点 (这里简化)
     }
 }
 
-void FeatureTracker::DetectNewFeatures()
+void FeatureDetector::DetectNewFeatures()
 {
     int maxToDetect = maxFeatures - currPtsLeft.size();
     if (maxToDetect > 0)
@@ -110,11 +93,32 @@ void FeatureTracker::DetectNewFeatures()
     }
 }
 
-void FeatureTracker::SetMask()
+void FeatureDetector::SetMask()
 {
     mask = cv::Mat(currImgLeft.size(), CV_8UC1, cv::Scalar(255));
     for (const auto &pt : currPtsLeft)
     {
         cv::circle(mask, pt, minFeatureDist, 0, -1);
     }
+}
+
+// Getter 函数实现
+const std::vector<int>& FeatureDetector::getTrackIds() const 
+{ 
+    return trackIds; 
+}
+
+const std::vector<cv::Point2f>& FeatureDetector::getCurrPtsLeft() const 
+{ 
+    return currPtsLeft; 
+}
+
+const std::vector<cv::Point2f>& FeatureDetector::getCurrPtsRight() const 
+{ 
+    return currPtsRight; 
+}
+
+const std::vector<int>& FeatureDetector::getTrackCnt() const 
+{ 
+    return trackCnt; 
 }

@@ -60,7 +60,7 @@ private:
     std::shared_ptr<Map> mpMap;
     
     // 特征追踪器 (负责光流和双目极线搜索)
-    FeatureTracker mFeatureTracker;
+    FeatureDetector mFeatureTracker;
 
     // 帧管理
     std::shared_ptr<Frame> mCurrentFrame;

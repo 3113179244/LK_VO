@@ -1,3 +1,6 @@
+#ifndef CAMERA_H
+#define CAMERA_H
+
 #include <opencv2/opencv.hpp>
 #include <memory>
 #include <vector>
@@ -63,3 +66,5 @@ public:
     // 双目基线长度 (单位通常是米)
     const float mBaseline;
 };
+
+#endif // CAMERA_H

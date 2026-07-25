@@ -1,3 +1,6 @@
+#ifndef FRAME_H
+#define FRAME_H
+
 #include <opencv2/opencv.hpp>
 #include <Eigen/Core>
 #include <Eigen/Dense>
@@ -54,3 +57,5 @@ public:
 private:
     std::mutex mMutexPose; // 保护位姿更新的互斥锁
 };
+
+#endif // FRAME_H

@@ -1,3 +1,6 @@
+#ifndef MAP_H
+#define MAP_H
+
 #include <unordered_map>
 #include <vector>
 #include <memory>
@@ -66,3 +69,5 @@ private:
     // 对 mKeyFrames 和 mMapPoints 的任何增删改查都必须加锁
     std::mutex mMutexMap;
 };
+
+#endif // MAP_H

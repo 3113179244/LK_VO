@@ -1,4 +1,6 @@
 #include <opencv2/opencv.hpp>
+#include <Eigen/Core>
+#include <Eigen/Dense>
 #include <vector>
 #include <memory>
 #include <mutex>
@@ -8,7 +10,8 @@ class Frame;
 class MapPoint;
 class Camera;
 
-class KeyFrame {
+class KeyFrame
+{
 public:
     typedef std::shared_ptr<KeyFrame> Ptr;
 
@@ -18,16 +21,16 @@ public:
     // ==========================================
     // 1. 位姿读写 (后端 BA 会不断修改它的位姿)
     // ==========================================
-    void SetPose(const cv::Mat& Tcw);
-    cv::Mat GetPose();
-    cv::Mat GetCameraCenter();
-    
+    void SetPose(const Eigen::Matrix4f &Tcw);
+    Eigen::Matrix4f GetPose();
+    Eigen::Vector3f GetCameraCenter();
+
     // ==========================================
     // 2. 地图点关联 (MapPoint Observation)
     // ==========================================
     // 获取该关键帧能看到的所有 3D 地图点
     std::vector<std::shared_ptr<MapPoint>> GetMapPoints();
-    
+
     // 获取特定特征点索引对应的 MapPoint
     std::shared_ptr<MapPoint> GetMapPoint(const size_t idx);
 
@@ -49,29 +52,29 @@ public:
     // ==========================================
     // 基础信息 (元数据)
     // ==========================================
-    const long unsigned int mId;       // 关键帧的全局唯一ID (注意: 不是Frame的ID)
-    const long unsigned int mFrameId;  // 对应的原始 Frame ID
-    const double mTimeStamp;           // 时间戳
-    
+    const long unsigned int mId;      // 关键帧的全局唯一ID (注意: 不是Frame的ID)
+    const long unsigned int mFrameId; // 对应的原始 Frame ID
+    const double mTimeStamp;          // 时间戳
+
     // ==========================================
     // 传感器信息 (通常从 Frame 深拷贝过来)
     // ==========================================
     std::shared_ptr<Camera> mpCamera;
-    const float mbf; 
-    const int N;                       // 特征点总数
+    const float mbf;
+    const int N; // 特征点总数
 
     // 2D 特征点观测 (从 Frame 拷贝，用于计算重投影误差)
     // 在光流法中，这里存储的是通过光流追踪到的像素坐标
-    std::vector<cv::KeyPoint> mvKeysLeft; 
-    std::vector<int> mvFeatureIds;     // 对应的全局光流特征点ID
+    std::vector<cv::KeyPoint> mvKeysLeft;
+    std::vector<int> mvFeatureIds; // 对应的全局光流特征点ID
 
 private:
     // ==========================================
     // 状态数据与线程锁
     // ==========================================
-    cv::Mat mTcw;      // 世界到相机的变换矩阵 $T_{cw}$
-    cv::Mat mOw;       // 相机光心在世界坐标系下的坐标
-    
+    Eigen::Matrix4f mTcw; // 世界到相机的变换矩阵 $T_{cw}$
+    Eigen::Vector3f mOw;  // 相机光心在世界坐标系下的坐标
+
     // 存储当前帧关联的 MapPoint (长度等于 N，未关联则为 nullptr)
     std::vector<std::shared_ptr<MapPoint>> mvpMapPoints;
 

@@ -5,12 +5,11 @@ int FeatureTracker::nextFeatureId = 0;
 
 FeatureTracker::FeatureTracker()
 {
-    // 假设这些参数可以通过你的 Config 类读取
     maxFeatures = Config::get<int>("max_cnt");
     minFeatureDist = Config::get<int>("min_dist");
 }
 
-void FeatureTracker::TrackImage(const cv::Mat &_currImgLeft, const cv::Mat &_currImgRight)
+void FeatureTracker::TrackImage(const double &timestamp, const cv::Mat &_currImgLeft, const cv::Mat &_currImgRight)
 {
     currImgLeft = _currImgLeft;
     currImgRight = _currImgRight;

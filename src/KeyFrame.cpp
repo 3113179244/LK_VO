@@ -11,25 +11,25 @@ KeyFrame::KeyFrame(std::shared_ptr<Frame> pFrame)
     SetPose(pFrame->GetPose());
 }
 
-void KeyFrame::SetPose(const cv::Mat &Tcw)
+void KeyFrame::SetPose(const Eigen::Matrix4f &Tcw)
 {
     std::unique_lock<std::mutex> lock(mMutexPose);
-    mTcw = Tcw.clone();
-    cv::Mat Rcw = mTcw.rowRange(0, 3).colRange(0, 3);
-    cv::Mat tcw = mTcw.rowRange(0, 3).col(3);
-    mOw = -Rcw.t() * tcw;
+    mTcw = Tcw;
+    Eigen::Matrix3f Rcw = mTcw.block<3, 3>(0, 0);
+    Eigen::Vector3f tcw = mTcw.block<3, 1>(0, 3);
+    mOw = -Rcw.transpose() * tcw;
 }
 
-cv::Mat KeyFrame::GetPose()
+Eigen::Matrix4f KeyFrame::GetPose()
 {
     std::unique_lock<std::mutex> lock(mMutexPose);
-    return mTcw.clone();
+    return mTcw;
 }
 
-cv::Mat KeyFrame::GetCameraCenter()
+Eigen::Vector3f KeyFrame::GetCameraCenter()
 {
     std::unique_lock<std::mutex> lock(mMutexPose);
-    return mOw.clone();
+    return mOw;
 }
 
 std::vector<std::shared_ptr<MapPoint>> KeyFrame::GetMapPoints()

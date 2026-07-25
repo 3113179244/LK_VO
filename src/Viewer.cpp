@@ -40,7 +40,6 @@ void Viewer::Run()
         // 渲染元素
         DrawMapPoints();
         DrawKeyFrames();
-        // DrawCurrentCamera(); // 需前端传入当前帧
 
         pangolin::FinishFrame();
 
@@ -58,10 +57,9 @@ void Viewer::DrawMapPoints()
 {
     // 从 Map 中安全获取数据
     std::vector<std::shared_ptr<MapPoint>> vpMPs = mpMap->GetAllMapPoints();
-    [cite:1] std::vector<std::shared_ptr<MapPoint>> vpActiveMPs = mpMap->GetActiveMapPoints();
-    [cite:1]
+    std::vector<std::shared_ptr<MapPoint>> vpActiveMPs = mpMap->GetActiveMapPoints();
 
-        if (vpMPs.empty()) return;
+    if (vpMPs.empty()) return;
 
     glPointSize(mPointSize);
     glBegin(GL_POINTS);
@@ -71,12 +69,12 @@ void Viewer::DrawMapPoints()
     {
         if (vpMPs[i]->isBad())
             continue;
-        [cite:1] cv::Mat pos = vpMPs[i]->GetWorldPos();
-        [cite:1] glVertex3f(pos.at<float>(0), pos.at<float>(1), pos.at<float>(2));
+        cv::Mat pos = vpMPs[i]->GetWorldPos();
+        glVertex3f(pos.at<float>(0), pos.at<float>(1), pos.at<float>(2));
     }
     glEnd();
 
-    // 绘制局部活跃点（例如用红色以示区分）
+    // 绘制局部活跃点（红色以示区分）
     glPointSize(mPointSize);
     glBegin(GL_POINTS);
     glColor3f(1.0, 0.0, 0.0);
@@ -84,8 +82,8 @@ void Viewer::DrawMapPoints()
     {
         if (vpActiveMPs[i]->isBad())
             continue;
-        [cite:1] cv::Mat pos = vpActiveMPs[i]->GetWorldPos();
-        [cite:1] glVertex3f(pos.at<float>(0), pos.at<float>(1), pos.at<float>(2));
+        cv::Mat pos = vpActiveMPs[i]->GetWorldPos();
+        glVertex3f(pos.at<float>(0), pos.at<float>(1), pos.at<float>(2));
     }
     glEnd();
 }
@@ -94,14 +92,10 @@ void Viewer::DrawKeyFrames()
 {
     // 渲染 KeyFrame 的位姿
     std::vector<std::shared_ptr<Frame>> vpKFs = mpMap->GetAllKeyFrames();
-    [cite:1]
 
-        for (size_t i = 0; i < vpKFs.size(); i++)
+    for (size_t i = 0; i < vpKFs.size(); i++)
     {
         Eigen::Matrix4f Tcw = vpKFs[i]->GetPose();
-        [cite:1] Eigen::Matrix4f Twc = Tcw.inverse(); // 从 Tcw 获取 Twc 以渲染相机在世界坐标系的姿态
-
-        // 此处添加绘制相机金字塔 (Frustum) 的 OpenGL 顶点代码
-        // (省略具体的绘制代码以保持简洁)
+        Eigen::Matrix4f Twc = Tcw.inverse(); // 从 Tcw 获取 Twc 以渲染相机在世界坐标系的姿态
     }
 }

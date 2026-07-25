@@ -64,7 +64,6 @@ int main(int argc, char **argv)
     std::cout << "  - 空格键 (Space): 暂停/恢复播放" << std::endl;
     std::cout << "  - Q 键           : 恢复播放" << std::endl;
     std::cout << "  - ESC 键         : 退出程序" << std::endl;
-
     int nFrameId = 0;
     bool bIsPaused = false;
 
@@ -100,22 +99,13 @@ int main(int argc, char **argv)
 
             // 将图像和时间戳传给 VO 系统进行双目跟踪和位姿估计
             Eigen::Matrix4f mTcw = SLAM.TrackStereo(matImgLeft, matImgRight, dCurrentTimestamp);
-
-            // 绘制UI信息
-            std::stringstream ssText;
-            ssText << "Frame: " << nFrameId << " | Time: " << std::fixed << std::setprecision(4) << dCurrentTimestamp << "s";
-
-            cv::putText(matImgLeft, ssText.str(), cv::Point(30, 40),
-                        cv::FONT_HERSHEY_SIMPLEX, 0.7, cv::Scalar(255), 2);
-
-            std::string strStatusText = bIsPaused ? "PAUSED" : "PLAYING";
-            cv::putText(matImgLeft, strStatusText, cv::Point(matImgLeft.cols - 160, 40),
-                        cv::FONT_HERSHEY_SIMPLEX, 0.7, cv::Scalar(255), 2);
-
-            cv::imshow("KITTI VO (Left)", matImgLeft);
+            // 拼接上下图像（垂直拼接）
+            cv::Mat matStereoDisplay;
+            cv::vconcat(matImgLeft, matImgRight, matStereoDisplay);
+            cv::imshow("Top (Left) / Bottom (Right)", matStereoDisplay);
+            nFrameId++;
         }
-
-        int nWaitTime = bIsPaused ? 0 : 20;
+        int nWaitTime = bIsPaused ? 10 : 20;
         char cKey = static_cast<char>(cv::waitKey(nWaitTime));
 
         if (cKey == 27) // ESC
@@ -139,14 +129,9 @@ int main(int argc, char **argv)
                 std::cout << "\r[状态] 恢复播放...                      " << std::flush;
             }
         }
-
-        if (!bIsPaused)
-        {
-            nFrameId++;
-        }
     }
 
-    // 7. 安全关闭系统线程
+    // 安全关闭系统线程
     SLAM.Shutdown();
     cv::destroyAllWindows();
 

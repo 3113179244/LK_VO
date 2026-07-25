@@ -36,7 +36,7 @@ add_library(${PROJECT_NAME}_lib
   src/Optimizer.cpp
   src/System.cpp
   src/Tracker.cpp
-  src/Viewer.cpp
+  # src/Viewer.cpp
 )
 
 target_link_libraries(${PROJECT_NAME}_lib

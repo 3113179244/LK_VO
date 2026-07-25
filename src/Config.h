@@ -12,54 +12,58 @@ class Config
 public:
     Config();
     ~Config();
-    static cv::FileStorage file_;
-    static std::shared_ptr<Config> config_;
-    static int imu;
-    static int num_of_cam;
-    static std::string image0_topic;
-    static std::string image1_topic;
-    static std::string output_path;
 
-    static int image_width;
-    static int image_height;
+    static cv::FileStorage g_fileConfig;
+    static std::shared_ptr<Config> g_spConfig;
 
-    static Eigen::Matrix4d body_T_cam0;
-    static Eigen::Matrix4d body_T_cam1;
+    static int g_nImu;
+    static int g_nNumOfCam;
+    static std::string g_strImage0Topic;
+    static std::string g_strImage1Topic;
+    static std::string g_strOutputPath;
 
-    static int max_cnt;
-    static int min_dist;
-    static int freq;
-    static double F_threshold;
-    static int show_track;
-    static int flow_back;
+    static int g_nImageWidth;
+    static int g_nImageHeight;
 
-    static double max_solver_time;
-    static int max_num_iterations;
-    static double keyframe_parallax;
+    static Eigen::Matrix4d g_mBodyTCam0;
+    static Eigen::Matrix4d g_mBodyTCam1;
 
-    static double acc_n;
-    static double gyr_n;
-    static double acc_w;
-    static double gyr_w;
-    static double g_norm;
+    static int g_nMaxCnt;
+    static int g_nMinDist;
+    static int g_nFreq;
+    static double g_dFThreshold;
+    static int g_nShowTrack;
+    static int g_nFlowBack;
 
-    static double fx0, fy0, cx0, cy0;
-    static double k1_0, k2_0, p1_0, p2_0;
+    static double g_dMaxSolverTime;
+    static int g_nMaxNumIterations;
+    static double g_dKeyframeParallax;
 
-    static double fx1, fy1, cx1, cy1;
-    static double k1_1, k2_1, p1_1, p2_1;
-    static bool setParameterFile(const std::string &config_file);
+    static double g_dAccN;
+    static double g_dGyrN;
+    static double g_dAccW;
+    static double g_dGyrW;
+    static double g_dGNorm;
+
+    static double g_dFx0, g_dFy0, g_dCx0, g_dCy0;
+    static double g_dK1_0, g_dK2_0, g_dP1_0, g_dP2_0;
+
+    static double g_dFx1, g_dFy1, g_dCx1, g_dCy1;
+    static double g_dK1_1, g_dK2_1, g_dP1_1, g_dP2_1;
+
+    static bool setParameterFile(const std::string &strConfigFile);
+
     template <typename T>
-    static T get(const std::string &key)
+    static T get(const std::string &strKey)
     {
-        return T(Config::file_[key]);
+        return T(Config::g_fileConfig[strKey]);
     }
 
 private:
-    static bool readCameraConfig(const std::string &cam_config_file,
-                                 double &fx, double &fy, double &cx, double &cy,
-                                 double &k1, double &k2, double &p1, double &p2);
-    static Eigen::Matrix4d cvMat2Eigen(const cv::Mat &cvMat);
+    static bool readCameraConfig(const std::string &strCamConfigFile,
+                                 double &dFx, double &dFy, double &dCx, double &dCy,
+                                 double &dK1, double &dK2, double &dP1, double &dP2);
+    static Eigen::Matrix4d cvMat2Eigen(const cv::Mat &matCv);
 };
 
-#endif 
+#endif

@@ -8,109 +8,109 @@
 
 int main()
 {
-    std::string file_path = "/home/wzj/KITTI/data_odometry_gray/dataset/sequences/00/";
-    std::string left_dir = file_path + "image_0/";
-    std::string right_dir = file_path + "image_1/";
-    std::string times_path = file_path + "times.txt";
+    std::string strFilePath = "/home/wzj/KITTI/data_odometry_gray/dataset/sequences/00/";
+    std::string strLeftDir = strFilePath + "image_0/";
+    std::string strRightDir = strFilePath + "image_1/";
+    std::string strTimesPath = strFilePath + "times.txt";
 
-    if (!cv::utils::fs::exists(left_dir) || !cv::utils::fs::exists(right_dir))
+    if (!cv::utils::fs::exists(strLeftDir) || !cv::utils::fs::exists(strRightDir))
     {
         std::cerr << "错误: 找不到 image_0 或 image_1 路径！" << std::endl;
         return -1;
     }
 
-    std::vector<double> timestamps;
-    std::ifstream times_file(times_path);
-    if (!times_file.is_open())
+    std::vector<double> vdTimestamps;
+    std::ifstream fileTimes(strTimesPath);
+    if (!fileTimes.is_open())
     {
-        std::cerr << "错误: 无法打开时间戳文件 " << times_path << std::endl;
+        std::cerr << "错误: 无法打开时间戳文件 " << strTimesPath << std::endl;
         return -1;
     }
 
-    double timestamp;
-    while (times_file >> timestamp)
+    double dTimestamp = 0.0;
+    while (fileTimes >> dTimestamp)
     {
-        timestamps.push_back(timestamp);
+        vdTimestamps.push_back(dTimestamp);
     }
-    times_file.close();
+    fileTimes.close();
 
-    std::cout << "成功加载 " << timestamps.size() << " 个时间戳。" << std::endl;
+    std::cout << "成功加载 " << vdTimestamps.size() << " 个时间戳。" << std::endl;
     std::cout << "  - 空格键 (Space): 暂停播放" << std::endl;
     std::cout << "  - Q 键           : 继续播放" << std::endl;
     std::cout << "  - ESC 键         : 退出程序" << std::endl;
 
-    int frame_id = 0;
-    bool is_paused = false;
+    int nFrameId = 0;
+    bool bIsPaused = false;
 
     while (true)
     {
-        std::stringstream ss;
-        ss << std::setw(6) << std::setfill('0') << frame_id << ".png";
-        std::string filename = ss.str();
+        std::stringstream ssFilename;
+        ssFilename << std::setw(6) << std::setfill('0') << nFrameId << ".png";
+        std::string strFilename = ssFilename.str();
 
-        std::string left_img_path = left_dir + filename;
-        std::string right_img_path = right_dir + filename;
+        std::string strLeftImgPath = strLeftDir + strFilename;
+        std::string strRightImgPath = strRightDir + strFilename;
 
-        if (!cv::utils::fs::exists(left_img_path) || !cv::utils::fs::exists(right_img_path) || frame_id >= timestamps.size())
+        if (!cv::utils::fs::exists(strLeftImgPath) || !cv::utils::fs::exists(strRightImgPath) || nFrameId >= static_cast<int>(vdTimestamps.size()))
         {
-            std::cout << "\n已到达序列末尾，播放结束。共处理 " << frame_id << " 帧。" << std::endl;
+            std::cout << "\n已到达序列末尾，播放结束。共处理 " << nFrameId << " 帧。" << std::endl;
             break;
         }
 
-        if (!is_paused)
+        if (!bIsPaused)
         {
-            cv::Mat img_left = cv::imread(left_img_path, cv::IMREAD_GRAYSCALE);
-            cv::Mat img_right = cv::imread(right_img_path, cv::IMREAD_GRAYSCALE);
+            cv::Mat matImgLeft = cv::imread(strLeftImgPath, cv::IMREAD_GRAYSCALE);
+            cv::Mat matImgRight = cv::imread(strRightImgPath, cv::IMREAD_GRAYSCALE);
 
-            if (img_left.empty() || img_right.empty())
+            if (matImgLeft.empty() || matImgRight.empty())
             {
-                std::cerr << "错误: 无法读取图像: " << filename << std::endl;
+                std::cerr << "错误: 无法读取图像: " << strFilename << std::endl;
                 break;
             }
 
-            double current_timestamp = timestamps[frame_id];
+            double dCurrentTimestamp = vdTimestamps[nFrameId];
 
-            std::stringstream text_ss;
-            text_ss << "Frame: " << frame_id << " | Time: " << std::fixed << std::setprecision(4) << current_timestamp << "s";
+            std::stringstream ssText;
+            ssText << "Frame: " << nFrameId << " | Time: " << std::fixed << std::setprecision(4) << dCurrentTimestamp << "s";
             
-            cv::putText(img_left, text_ss.str(), cv::Point(30, 40),
+            cv::putText(matImgLeft, ssText.str(), cv::Point(30, 40),
                         cv::FONT_HERSHEY_SIMPLEX, 0.7, cv::Scalar(255), 2);
 
-            std::string status_text = is_paused ? "PAUSED" : "PLAYING";
-            cv::putText(img_left, status_text, cv::Point(img_left.cols - 160, 40),
+            std::string strStatusText = bIsPaused ? "PAUSED" : "PLAYING";
+            cv::putText(matImgLeft, strStatusText, cv::Point(matImgLeft.cols - 160, 40),
                         cv::FONT_HERSHEY_SIMPLEX, 0.7, cv::Scalar(255), 2);
 
-            cv::imshow("KITTI Mono Reader (Left)", img_left);
+            cv::imshow("KITTI Mono Reader (Left)", matImgLeft);
         }
 
-        int wait_time = is_paused ? 0 : 20;
-        char key = static_cast<char>(cv::waitKey(wait_time));
+        int nWaitTime = bIsPaused ? 0 : 20;
+        char cKey = static_cast<char>(cv::waitKey(nWaitTime));
 
-        if (key == 27)
+        if (cKey == 27)
         {
             std::cout << "\n按下 ESC，退出程序。" << std::endl;
             break;
         }
-        else if (key == ' ')
+        else if (cKey == ' ')
         { 
-            if (!is_paused)
+            if (!bIsPaused)
             {
-                is_paused = true;
+                bIsPaused = true;
                 std::cout << "\r[状态] 已暂停播放 (按 Q 键继续)... " << std::flush;
             }
         }
-        else if (key == 'q' || key == 'Q')
+        else if (cKey == 'q' || cKey == 'Q')
         { 
-            if (is_paused)
+            if (bIsPaused)
             {
-                is_paused = false;
+                bIsPaused = false;
                 std::cout << "\r[状态] 恢复播放...               " << std::flush;
             }
         }
 
-        if (!is_paused)
+        if (!bIsPaused)
         {
-            frame_id++;
+            nFrameId++;
         }
     }
 

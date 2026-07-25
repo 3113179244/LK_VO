@@ -1,148 +1,150 @@
 #include "Config.h"
 
-std::shared_ptr<Config> Config::config_ = nullptr;
-cv::FileStorage Config::file_;
+std::shared_ptr<Config> Config::g_spConfig = nullptr;
+cv::FileStorage Config::g_fileConfig;
 
-int Config::imu = 0;
-int Config::num_of_cam = 0;
-std::string Config::image0_topic = "";
-std::string Config::image1_topic = "";
-std::string Config::output_path = "";
-int Config::image_width = 0;
-int Config::image_height = 0;
+int Config::g_nImu = 0;
+int Config::g_nNumOfCam = 0;
+std::string Config::g_strImage0Topic = "";
+std::string Config::g_strImage1Topic = "";
+std::string Config::g_strOutputPath = "";
+int Config::g_nImageWidth = 0;
+int Config::g_nImageHeight = 0;
 
-Eigen::Matrix4d Config::body_T_cam0 = Eigen::Matrix4d::Identity();
-Eigen::Matrix4d Config::body_T_cam1 = Eigen::Matrix4d::Identity();
+Eigen::Matrix4d Config::g_mBodyTCam0 = Eigen::Matrix4d::Identity();
+Eigen::Matrix4d Config::g_mBodyTCam1 = Eigen::Matrix4d::Identity();
 
-int Config::max_cnt = 0;
-int Config::min_dist = 0;
-int Config::freq = 0;
-double Config::F_threshold = 0.0;
-int Config::show_track = 0;
-int Config::flow_back = 0;
+int Config::g_nMaxCnt = 0;
+int Config::g_nMinDist = 0;
+int Config::g_nFreq = 0;
+double Config::g_dFThreshold = 0.0;
+int Config::g_nShowTrack = 0;
+int Config::g_nFlowBack = 0;
 
-double Config::max_solver_time = 0.0;
-int Config::max_num_iterations = 0;
-double Config::keyframe_parallax = 0.0;
+double Config::g_dMaxSolverTime = 0.0;
+int Config::g_nMaxNumIterations = 0;
+double Config::g_dKeyframeParallax = 0.0;
 
-double Config::acc_n = 0.0;
-double Config::gyr_n = 0.0;
-double Config::acc_w = 0.0;
-double Config::gyr_w = 0.0;
-double Config::g_norm = 0.0;
+double Config::g_dAccN = 0.0;
+double Config::g_dGyrN = 0.0;
+double Config::g_dAccW = 0.0;
+double Config::g_dGyrW = 0.0;
+double Config::g_dGNorm = 0.0;
 
-double Config::fx0 = 0, Config::fy0 = 0, Config::cx0 = 0, Config::cy0 = 0;
-double Config::k1_0 = 0, Config::k2_0 = 0, Config::p1_0 = 0, Config::p2_0 = 0;
+double Config::g_dFx0 = 0, Config::g_dFy0 = 0, Config::g_dCx0 = 0, Config::g_dCy0 = 0;
+double Config::g_dK1_0 = 0, Config::g_dK2_0 = 0, Config::g_dP1_0 = 0, Config::g_dP2_0 = 0;
 
-double Config::fx1 = 0, Config::fy1 = 0, Config::cx1 = 0, Config::cy1 = 0;
-double Config::k1_1 = 0, Config::k2_1 = 0, Config::p1_1 = 0, Config::p2_1 = 0;
-Config::Config(){}
+double Config::g_dFx1 = 0, Config::g_dFy1 = 0, Config::g_dCx1 = 0, Config::g_dCy1 = 0;
+double Config::g_dK1_1 = 0, Config::g_dK2_1 = 0, Config::g_dP1_1 = 0, Config::g_dP2_1 = 0;
+
+Config::Config() {}
+
 Config::~Config()
 {
-    if (file_.isOpened())
+    if (g_fileConfig.isOpened())
     {
-        file_.release();
+        g_fileConfig.release();
     }
 }
 
-bool Config::setParameterFile(const std::string &config_file)
+bool Config::setParameterFile(const std::string &strConfigFile)
 {
-    if (config_ == nullptr)
+    if (g_spConfig == nullptr)
     {
-        config_ = std::shared_ptr<Config>(new Config());
+        g_spConfig = std::shared_ptr<Config>(new Config());
     }
 
-    file_ = cv::FileStorage(config_file, cv::FileStorage::READ);
-    if (!file_.isOpened())
+    g_fileConfig = cv::FileStorage(strConfigFile, cv::FileStorage::READ);
+    if (!g_fileConfig.isOpened())
     {
-        std::cerr << "[Config] Error: Cannot open config file: " << config_file << std::endl;
+        std::cerr << "[Config] Error: Cannot open config file: " << strConfigFile << std::endl;
         return false;
     }
 
-    imu = get<int>("imu");
-    num_of_cam = get<int>("num_of_cam");
-    image0_topic = get<std::string>("image0_topic");
-    image1_topic = get<std::string>("image1_topic");
-    output_path = get<std::string>("output_path");
-    image_width = get<int>("image_width");
-    image_height = get<int>("image_height");
+    g_nImu = get<int>("imu");
+    g_nNumOfCam = get<int>("num_of_cam");
+    g_strImage0Topic = get<std::string>("image0_topic");
+    g_strImage1Topic = get<std::string>("image1_topic");
+    g_strOutputPath = get<std::string>("output_path");
+    g_nImageWidth = get<int>("image_width");
+    g_nImageHeight = get<int>("image_height");
 
-    cv::Mat cv_T0, cv_T1;
-    file_["body_T_cam0"] >> cv_T0;
-    file_["body_T_cam1"] >> cv_T1;
-    body_T_cam0 = cvMat2Eigen(cv_T0);
-    body_T_cam1 = cvMat2Eigen(cv_T1);
+    cv::Mat matCvT0, matCvT1;
+    g_fileConfig["body_T_cam0"] >> matCvT0;
+    g_fileConfig["body_T_cam1"] >> matCvT1;
+    g_mBodyTCam0 = cvMat2Eigen(matCvT0);
+    g_mBodyTCam1 = cvMat2Eigen(matCvT1);
 
-    max_cnt = get<int>("max_cnt");
-    min_dist = get<int>("min_dist");
-    freq = get<int>("freq");
-    F_threshold = get<double>("F_threshold");
-    show_track = get<int>("show_track");
-    flow_back = get<int>("flow_back");
+    g_nMaxCnt = get<int>("max_cnt");
+    g_nMinDist = get<int>("min_dist");
+    g_nFreq = get<int>("freq");
+    g_dFThreshold = get<double>("F_threshold");
+    g_nShowTrack = get<int>("show_track");
+    g_nFlowBack = get<int>("flow_back");
 
-    max_solver_time = get<double>("max_solver_time");
-    max_num_iterations = get<int>("max_num_iterations");
-    keyframe_parallax = get<double>("keyframe_parallax");
+    g_dMaxSolverTime = get<double>("max_solver_time");
+    g_nMaxNumIterations = get<int>("max_num_iterations");
+    g_dKeyframeParallax = get<double>("keyframe_parallax");
 
-    acc_n = get<double>("acc_n");
-    gyr_n = get<double>("gyr_n");
-    acc_w = get<double>("acc_w");
-    gyr_w = get<double>("gyr_w");
-    g_norm = get<double>("g_norm");
+    g_dAccN = get<double>("acc_n");
+    g_dGyrN = get<double>("gyr_n");
+    g_dAccW = get<double>("acc_w");
+    g_dGyrW = get<double>("gyr_w");
+    g_dGNorm = get<double>("g_norm");
 
-    std::string config_dir = config_file.substr(0, config_file.find_last_of("/\\") + 1);
-    std::string cam0_file = config_dir + get<std::string>("cam0_calib");
-    std::string cam1_file = config_dir + get<std::string>("cam1_calib");
+    std::string strConfigDir = strConfigFile.substr(0, strConfigFile.find_last_of("/\\") + 1);
+    std::string strCam0File = strConfigDir + get<std::string>("cam0_calib");
+    std::string strCam1File = strConfigDir + get<std::string>("cam1_calib");
 
-    readCameraConfig(cam0_file, fx0, fy0, cx0, cy0, k1_0, k2_0, p1_0, p2_0);
-    if (num_of_cam > 1)
+    readCameraConfig(strCam0File, g_dFx0, g_dFy0, g_dCx0, g_dCy0, g_dK1_0, g_dK2_0, g_dP1_0, g_dP2_0);
+    if (g_nNumOfCam > 1)
     {
-        readCameraConfig(cam1_file, fx1, fy1, cx1, cy1, k1_1, k2_1, p1_1, p2_1);
+        readCameraConfig(strCam1File, g_dFx1, g_dFy1, g_dCx1, g_dCy1, g_dK1_1, g_dK2_1, g_dP1_1, g_dP2_1);
     }
 
     std::cout << "[Config] Successfully loaded configuration parameters!" << std::endl;
     return true;
 }
 
-bool Config::readCameraConfig(const std::string &cam_config_file,
-                              double &fx, double &fy, double &cx, double &cy,
-                              double &k1, double &k2, double &p1, double &p2)
+bool Config::readCameraConfig(const std::string &strCamConfigFile,
+                              double &dFx, double &dFy, double &dCx, double &dCy,
+                              double &dK1, double &dK2, double &dP1, double &dP2)
 {
-    cv::FileStorage cam_file(cam_config_file, cv::FileStorage::READ);
-    if (!cam_file.isOpened())
+    cv::FileStorage fileCam(strCamConfigFile, cv::FileStorage::READ);
+    if (!fileCam.isOpened())
     {
-        std::cerr << "[Config] Error: Cannot open camera config file: " << cam_config_file << std::endl;
+        std::cerr << "[Config] Error: Cannot open camera config file: " << strCamConfigFile << std::endl;
         return false;
     }
 
-    cv::FileNode proj_node = cam_file["projection_parameters"];
-    fx = static_cast<double>(proj_node["fx"]);
-    fy = static_cast<double>(proj_node["fy"]);
-    cx = static_cast<double>(proj_node["cx"]);
-    cy = static_cast<double>(proj_node["cy"]);
+    cv::FileNode nodeProj = fileCam["projection_parameters"];
+    dFx = static_cast<double>(nodeProj["fx"]);
+    dFy = static_cast<double>(nodeProj["fy"]);
+    dCx = static_cast<double>(nodeProj["cx"]);
+    dCy = static_cast<double>(nodeProj["cy"]);
 
-    cv::FileNode dist_node = cam_file["distortion_parameters"];
-    k1 = static_cast<double>(dist_node["k1"]);
-    k2 = static_cast<double>(dist_node["k2"]);
-    p1 = static_cast<double>(dist_node["p1"]);
-    p2 = static_cast<double>(dist_node["p2"]);
+    cv::FileNode nodeDist = fileCam["distortion_parameters"];
+    dK1 = static_cast<double>(nodeDist["k1"]);
+    dK2 = static_cast<double>(nodeDist["k2"]);
+    dP1 = static_cast<double>(nodeDist["p1"]);
+    dP2 = static_cast<double>(nodeDist["p2"]);
 
-    cam_file.release();
+    fileCam.release();
     return true;
 }
 
-Eigen::Matrix4d Config::cvMat2Eigen(const cv::Mat &cvMat)
+Eigen::Matrix4d Config::cvMat2Eigen(const cv::Mat &matCv)
 {
-    Eigen::Matrix4d eigenMat = Eigen::Matrix4d::Identity();
-    if (cvMat.rows == 4 && cvMat.cols == 4)
+    Eigen::Matrix4d mEigen = Eigen::Matrix4d::Identity();
+    if (matCv.rows == 4 && matCv.cols == 4)
     {
         for (int i = 0; i < 4; ++i)
         {
             for (int j = 0; j < 4; ++j)
             {
-                eigenMat(i, j) = cvMat.at<double>(i, j);
+                mEigen(i, j) = matCv.at<double>(i, j);
             }
         }
     }
-    return eigenMat;
+    return mEigen;
 }

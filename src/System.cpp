@@ -20,19 +20,19 @@ System::System(const std::string &strConfigFile, const Sensor sensor, const bool
 
     // 2. 实例化相机模型 (根据 Config 参数构建 Camera 对象)
     // 计算 baseline = ||body_T_cam1.col(3) - body_T_cam0.col(3)||
-    double baseline = (Config::body_T_cam1.block<3,1>(0,3) - Config::body_T_cam0.block<3,1>(0,3)).norm();
+    double dBaseline = (Config::g_mBodyTCam1.block<3,1>(0,3) - Config::g_mBodyTCam0.block<3,1>(0,3)).norm();
     
     mpCamera0 = std::make_shared<Camera>(
-        Config::fx0, Config::fy0, Config::cx0, Config::cy0,
-        Config::k1_0, Config::k2_0, Config::p1_0, Config::p2_0, 0.0f,
-        baseline
+        Config::g_dFx0, Config::g_dFy0, Config::g_dCx0, Config::g_dCy0,
+        Config::g_dK1_0, Config::g_dK2_0, Config::g_dP1_0, Config::g_dP2_0, 0.0f,
+        dBaseline
     );
 
-    if (Config::num_of_cam > 1) {
+    if (Config::g_nNumOfCam > 1) {
         mpCamera1 = std::make_shared<Camera>(
-            Config::fx1, Config::fy1, Config::cx1, Config::cy1,
-            Config::k1_1, Config::k2_1, Config::p1_1, Config::p2_1, 0.0f,
-            baseline
+            Config::g_dFx1, Config::g_dFy1, Config::g_dCx1, Config::g_dCy1,
+            Config::g_dK1_1, Config::g_dK2_1, Config::g_dP1_1, Config::g_dP2_1, 0.0f,
+            dBaseline
         );
     }
 

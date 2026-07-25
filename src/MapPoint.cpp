@@ -1,62 +1,60 @@
 #include "MapPoint.h"
 #include "Frame.h"
 
-unsigned long MapPoint::id_counter_ = 0;
+MapPoint::MapPoint(const long unsigned int id, const cv::Mat &position)
+    : mId(id), mWorldPos(position.clone()), mnObs(0), mbBad(false) {}
 
-MapPoint::MapPoint(unsigned long id, const Eigen::Vector3d &pos)
-    : id_(id), pos_(pos) {}
-
-MapPoint::Ptr MapPoint::createMapPoint(const Eigen::Vector3d &pos)
+void MapPoint::SetWorldPos(const cv::Mat &Pos)
 {
-    std::unique_lock<std::mutex> lock(id_mutex_);
-    return std::make_shared<MapPoint>(id_counter_++, pos);
+    std::unique_lock<std::mutex> lock(mMutexPos);
+    Pos.copyTo(mWorldPos);
 }
 
-Eigen::Vector3d MapPoint::getPos()
+cv::Mat MapPoint::GetWorldPos()
 {
-    std::unique_lock<std::mutex> lock(data_mutex_);
-    return pos_;
+    std::unique_lock<std::mutex> lock(mMutexPos);
+    return mWorldPos.clone();
 }
 
-void MapPoint::setPos(const Eigen::Vector3d &pos)
+void MapPoint::AddObservation(std::shared_ptr<Frame> pFrame, size_t idx)
 {
-    std::unique_lock<std::mutex> lock(data_mutex_);
-    pos_ = pos;
+    std::unique_lock<std::mutex> lock(mMutexFeatures);
+    if (mObservations.count(pFrame))
+        return;
+    mObservations[pFrame] = idx;
+    mnObs++;
+}
+
+void MapPoint::RemoveObservation(std::shared_ptr<Frame> pFrame)
+{
+    std::unique_lock<std::mutex> lock(mMutexFeatures);
+    if (mObservations.count(pFrame))
+    {
+        mObservations.erase(pFrame);
+        mnObs--;
+    }
+}
+
+std::map<std::shared_ptr<Frame>, size_t> MapPoint::GetObservations()
+{
+    std::unique_lock<std::mutex> lock(mMutexFeatures);
+    return mObservations;
+}
+
+int MapPoint::GetObservedCount()
+{
+    std::unique_lock<std::mutex> lock(mMutexFeatures);
+    return mnObs;
+}
+
+void MapPoint::SetBadFlag()
+{
+    std::unique_lock<std::mutex> lock(mMutexFeatures);
+    mbBad = true;
 }
 
 bool MapPoint::isBad()
 {
-    std::unique_lock<std::mutex> lock(data_mutex_);
-    return is_outlier_;
-}
-
-void MapPoint::setBad(bool is_bad)
-{
-    std::unique_lock<std::mutex> lock(data_mutex_);
-    is_outlier_ = is_bad;
-}
-
-void MapPoint::addObservation(std::shared_ptr<Frame> frame)
-{
-    std::unique_lock<std::mutex> lock(obs_mutex_);
-    observations_.push_back(frame);
-}
-
-void MapPoint::removeObservation(std::shared_ptr<Frame> frame)
-{
-    std::unique_lock<std::mutex> lock(obs_mutex_);
-    for (auto iter = observations_.begin(); iter != observations_.end(); ++iter)
-    {
-        if (iter->lock() == frame)
-        {
-            observations_.erase(iter);
-            break;
-        }
-    }
-}
-
-std::list<std::weak_ptr<Frame>> MapPoint::getObservations()
-{
-    std::unique_lock<std::mutex> lock(obs_mutex_);
-    return observations_;
+    std::unique_lock<std::mutex> lock(mMutexFeatures);
+    return mbBad;
 }

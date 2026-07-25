@@ -1,80 +1,98 @@
 #include "Map.h"
+#include "Frame.h"
+#include "MapPoint.h"
 
-void Map::insertKeyFrame(Frame::Ptr frame)
+Map::Map() : mNumActiveKeyframes(10) {}
+
+void Map::InsertKeyFrame(std::shared_ptr<Frame> frame)
 {
-    std::unique_lock<std::mutex> lock(data_mutex_);
+    std::unique_lock<std::mutex> lock(mMutexMap);
+    mKeyFrames[frame->mId] = frame;
+    mActiveKeyFrames[frame->mId] = frame;
+}
 
-    keyframes_[frame->id()] = frame;
-    active_keyframes_[frame->id()] = frame;
+void Map::InsertMapPoint(std::shared_ptr<MapPoint> map_point)
+{
+    std::unique_lock<std::mutex> lock(mMutexMap);
+    mMapPoints[map_point->mId] = map_point;
+    mActiveMapPoints[map_point->mId] = map_point;
+}
 
-    // 如果局部关键帧数量超过上限，滑出最老的关键帧
-    if (active_keyframes_.size() > num_active_keyframes_)
+void Map::EraseMapPoint(std::shared_ptr<MapPoint> map_point)
+{
+    std::unique_lock<std::mutex> lock(mMutexMap);
+    mMapPoints.erase(map_point->mId);
+    mActiveMapPoints.erase(map_point->mId);
+    map_point->SetBadFlag();
+}
+
+void Map::EraseOldestKeyFrame()
+{
+    std::unique_lock<std::mutex> lock(mMutexMap);
+    if (mActiveKeyFrames.size() > (size_t)mNumActiveKeyframes)
     {
-        // 找到 ID 最小（最老）的关键帧并移除
+        // 查找时间戳最老/ID最小的一帧
         unsigned long min_id = std::numeric_limits<unsigned long>::max();
-        for (auto &kf : active_keyframes_)
+        for (auto &kf : mActiveKeyFrames)
         {
             if (kf.first < min_id)
             {
                 min_id = kf.first;
             }
         }
-        active_keyframes_.erase(min_id);
+        mActiveKeyFrames.erase(min_id);
     }
 }
 
-void Map::insertMapPoint(MapPoint::Ptr map_point)
+std::vector<std::shared_ptr<Frame>> Map::GetAllKeyFrames()
 {
-    std::unique_lock<std::mutex> lock(data_mutex_);
-    landmarks_[map_point->id_] = map_point;
-    active_landmarks_[map_point->id_] = map_point;
+    std::unique_lock<std::mutex> lock(mMutexMap);
+    std::vector<std::shared_ptr<Frame>> res;
+    for (auto &kf : mKeyFrames)
+        res.push_back(kf.second);
+    return res;
 }
 
-Map::LandmarksType Map::getAllMapPoints()
+std::vector<std::shared_ptr<MapPoint>> Map::GetAllMapPoints()
 {
-    std::unique_lock<std::mutex> lock(data_mutex_);
-    return landmarks_;
+    std::unique_lock<std::mutex> lock(mMutexMap);
+    std::vector<std::shared_ptr<MapPoint>> res;
+    for (auto &mp : mMapPoints)
+        res.push_back(mp.second);
+    return res;
 }
 
-Map::KeyframesType Map::getAllKeyFrames()
+std::vector<std::shared_ptr<Frame>> Map::GetActiveKeyFrames()
 {
-    std::unique_lock<std::mutex> lock(data_mutex_);
-    return keyframes_;
+    std::unique_lock<std::mutex> lock(mMutexMap);
+    std::vector<std::shared_ptr<Frame>> res;
+    for (auto &kf : mActiveKeyFrames)
+        res.push_back(kf.second);
+    return res;
 }
 
-Map::LandmarksType Map::getActiveMapPoints()
+std::vector<std::shared_ptr<MapPoint>> Map::GetActiveMapPoints()
 {
-    std::unique_lock<std::mutex> lock(data_mutex_);
-    return active_landmarks_;
+    std::unique_lock<std::mutex> lock(mMutexMap);
+    std::vector<std::shared_ptr<MapPoint>> res;
+    for (auto &mp : mActiveMapPoints)
+        res.push_back(mp.second);
+    return res;
 }
 
-Map::KeyframesType Map::getActiveKeyFrames()
+int Map::GetKeyFramesInMap()
 {
-    std::unique_lock<std::mutex> lock(data_mutex_);
-    return active_keyframes_;
+    std::unique_lock<std::mutex> lock(mMutexMap);
+    return mKeyFrames.size();
 }
 
-void Map::removeMapPoint(MapPoint::Ptr map_point)
+int Map::GetMapPointsInMap()
 {
-    std::unique_lock<std::mutex> lock(data_mutex_);
-    landmarks_.erase(map_point->id_);
-    active_landmarks_.erase(map_point->id_);
+    std::unique_lock<std::mutex> lock(mMutexMap);
+    return mMapPoints.size();
 }
 
-void Map::cleanMap()
+void Map::SetNumActiveKeyFrames(int num)
 {
-    std::unique_lock<std::mutex> lock(data_mutex_);
-    int cnt_landmark_removed = 0;
-    for (auto iter = active_landmarks_.begin(); iter != active_landmarks_.end();)
-    {
-        if (iter->second->is_outlier_)
-        {
-            iter = active_landmarks_.erase(iter);
-            cnt_landmark_removed++;
-        }
-        else
-        {
-            ++iter;
-        }
-    }
+    mNumActiveKeyframes = num;
 }

@@ -36,7 +36,7 @@ double Config::k1_0 = 0, Config::k2_0 = 0, Config::p1_0 = 0, Config::p2_0 = 0;
 
 double Config::fx1 = 0, Config::fy1 = 0, Config::cx1 = 0, Config::cy1 = 0;
 double Config::k1_1 = 0, Config::k2_1 = 0, Config::p1_1 = 0, Config::p2_1 = 0;
-
+Config::Config(){}
 Config::~Config()
 {
     if (file_.isOpened())

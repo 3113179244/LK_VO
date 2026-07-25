@@ -25,6 +25,7 @@ include_directories(
 )
 
 add_library(${PROJECT_NAME}_lib
+  src/Camera.cpp
   src/Config.cpp
   src/FeatureDetector.cpp
   src/Frame.cpp

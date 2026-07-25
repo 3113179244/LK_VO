@@ -8,19 +8,18 @@
 #include <iostream>
 
 System::System(const std::string &strConfigFile, const Sensor sensor, const bool bUseViewer)
-    : mSensor(sensor), mbUseViewer(bUseViewer), mptViewer(nullptr)
+    : mSensor(sensor), mbUseViewer(bUseViewer), mbShutdown(false)
 {
     std::cout << "[System] Initializing Optical Flow VO System..." << std::endl;
 
-    // 1. 加载参数文件
+    // 加载参数文件
     if (!Config::setParameterFile(strConfigFile))
     {
         std::cerr << "[System] Fatal Error: Failed to load config file: " << strConfigFile << std::endl;
         exit(-1);
     }
 
-    // 2. 实例化相机模型 (根据 Config 参数构建 Camera 对象)
-    // 计算 baseline = ||body_T_cam1.col(3) - body_T_cam0.col(3)||
+    // 实例化相机模型
     double dBaseline = (Config::g_mBodyTCam1.block<3, 1>(0, 3) - Config::g_mBodyTCam0.block<3, 1>(0, 3)).norm();
 
     mpCamera0 = std::make_shared<Camera>(
@@ -36,23 +35,13 @@ System::System(const std::string &strConfigFile, const Sensor sensor, const bool
             dBaseline);
     }
 
-    // 3. 初始化全局地图
+    // 初始化地图与算法核心模块
     mpMap = std::make_shared<Map>();
-
-    // 4. 初始化前端特征追踪与 Tracker
     mpTrackerDetector = std::make_shared<FeatureDetector>();
-
-    // 初始化 Tracker 并注入依赖项 (Map, Camera, FeatureDetector)
-    // 注：若你的 Tracker 构造函数参数不同，请自行调整
     // mpTracker = std::make_shared<Tracker>(mpMap, mpCamera0, mpTrackerDetector);
 
-    // 5. 初始化 3D 可视化线程 (Pangolin)
-    if (mbUseViewer)
-    {
-        mpViewer = std::make_shared<Viewer>(mpMap);
-        mptViewer = new std::thread(&Viewer::Run, mpViewer);
-        std::cout << "[System] Viewer thread started." << std::endl;
-    }
+    // 启动多线程管理
+    StartThreads();
 
     std::cout << "[System] System Initialization Complete!" << std::endl;
 }
@@ -62,28 +51,44 @@ System::~System()
     Shutdown();
 }
 
+void System::StartThreads()
+{
+    // 启动 Pangolin 3D 可视化渲染线程
+    if (mbUseViewer)
+    {
+        mpViewer = std::make_shared<Viewer>(mpMap);
+        mptViewer = std::make_unique<std::thread>(&Viewer::Run, mpViewer);
+        std::cout << "[System] Viewer thread created & started." << std::endl;
+    }
+
+    // 如果后续加入后端优化线程，可以在此处统一启动：
+    // mptBackend = std::make_unique<std::thread>(&Optimizer::RunLocalBA, mpOptimizer);
+}
+
 Eigen::Matrix4f System::TrackStereo(const cv::Mat &imLeft, const cv::Mat &imRight, const double &timestamp)
 {
+    if (IsShutDown())
+    {
+        std::cerr << "[System] Warning: System is shut down. Tracking aborted." << std::endl;
+        return Eigen::Matrix4f::Identity();
+    }
+
     if (mSensor != STEREO)
     {
         std::cerr << "[System] Error: System is not initialized for Stereo processing!" << std::endl;
         return Eigen::Matrix4f::Identity();
     }
 
-    // 检查图像格式
     if (imLeft.empty() || imRight.empty())
     {
         std::cerr << "[System] Warning: Empty image received!" << std::endl;
         return Eigen::Matrix4f::Identity();
     }
 
-    // 1. 调用 FeatureDetector 运行光流追踪与特征提取
+    // 光流特征追踪
     mpTrackerDetector->TrackImage(timestamp, imLeft, imRight);
 
-    // 2. 将数据交由 Tracker 运行位姿估计、初始化或帧间跟踪
-    // Eigen::Matrix4f Tcw = mpTracker->GrabStereoImage(imLeft, imRight, timestamp, mpTrackerDetector);
-
-    // 占位逻辑：目前先返回单位矩阵（或 Tracker 返回的位姿）
+    // 位姿估算
     Eigen::Matrix4f Tcw = Eigen::Matrix4f::Identity();
 
     return Tcw;
@@ -91,26 +96,26 @@ Eigen::Matrix4f System::TrackStereo(const cv::Mat &imLeft, const cv::Mat &imRigh
 
 void System::Shutdown()
 {
+    // 避免重复触发 Shutdown 逻辑
+    bool bExpected = false;
+    if (!mbShutdown.compare_exchange_strong(bExpected, true))
+    {
+        return;
+    }
+
     std::cout << "[System] System shutting down..." << std::endl;
 
-    // 终止 Viewer 线程
+    // 终止 Viewer 渲染线程
     if (mpViewer)
     {
         mpViewer->RequestFinish();
-        while (!mpViewer->isFinished())
-        {
-            std::this_thread::sleep_for(std::chrono::milliseconds(5));
-        }
     }
 
-    if (mptViewer)
+    if (mptViewer && mptViewer->joinable())
     {
-        if (mptViewer->joinable())
-        {
-            mptViewer->join();
-        }
-        delete mptViewer;
-        mptViewer = nullptr;
+        mptViewer->join();
+        mptViewer.reset();
+        std::cout << "[System] Viewer thread joined cleanly." << std::endl;
     }
 
     std::cout << "[System] System stopped cleanly." << std::endl;

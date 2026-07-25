@@ -8,7 +8,6 @@ class FeatureDetector {
 public:
     FeatureDetector();
 
-    // 1. 补上了末尾缺失的分号 ';'
     void TrackImage(const double &timestamp, const cv::Mat &_currImgLeft, const cv::Mat &_currImgRight);
 
     // Getter 声明
@@ -23,7 +22,8 @@ private:
     void RejectOutliers();
     void DetectNewFeatures();
     void SetMask();
-
+    void PrioritizeOldFeatures();// 保老点
+    bool inBorder(const cv::Point2f &pt, int cols, int rows);
 private:
     // 图像缓存
     cv::Mat prevImgLeft;

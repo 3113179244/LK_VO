@@ -17,10 +17,10 @@ void FeatureDetector::TrackImage(const double &timestamp, const cv::Mat &currImg
 
     if (prevPtsLeft.size() > 0)
     {
-        TrackTemporal();
+        TrackPrevLeftToCurrLeft();
     }
 
-    PrioritizeOldFeatures();
+    SortPointsByTrackCount();
 
     SetMask();
     DetectNewFeatures();
@@ -30,13 +30,13 @@ void FeatureDetector::TrackImage(const double &timestamp, const cv::Mat &currImg
         TrackStereo();
     }
 
-    RejectOutliers();
+    FilterStereoMismatch();
 
     prevImgLeft = currImgLeft;
     prevPtsLeft = currPtsLeft;
 }
 
-void FeatureDetector::PrioritizeOldFeatures()
+void FeatureDetector::SortPointsByTrackCount()
 {
     if (currPtsLeft.empty())
         return;
@@ -71,7 +71,7 @@ void FeatureDetector::PrioritizeOldFeatures()
     trackCnt = std::move(sortedCnt);
 }
 
-void FeatureDetector::TrackTemporal()
+void FeatureDetector::TrackPrevLeftToCurrLeft()
 {
     std::vector<uchar> status;
     std::vector<float> err;
@@ -102,7 +102,7 @@ void FeatureDetector::TrackStereo()
     cv::calcOpticalFlowPyrLK(currImgLeft, currImgRight, currPtsLeft, currPtsRight, status, err, cv::Size(21, 21), 3);
 }
 
-void FeatureDetector::RejectOutliers()
+void FeatureDetector::FilterStereoMismatch()
 {
     if (currPtsLeft.size() >= 8 && currPtsRight.size() >= 8)
     {

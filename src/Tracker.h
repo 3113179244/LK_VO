@@ -27,7 +27,7 @@ public:
     ~Tracker() = default;
 
     // 系统的主入口：传入当前时间戳和左右目图像，返回当前位姿 Tcw
-    cv::Mat GrabImageStereo(const cv::Mat& imLeft, const cv::Mat& imRight, const double timestamp);
+    Eigen::Matrix4d GrabImageStereo(const cv::Mat& imLeft, const cv::Mat& imRight, const double timestamp);
 
     // 获取当前追踪状态
     eTrackingState GetTrackingState() const { return mState; }
@@ -67,7 +67,7 @@ private:
     std::shared_ptr<Frame> mLastFrame;
 
     // 位姿与运动模型
-    cv::Mat mVelocity; // 恒速运动模型，用于位姿预测的 T_curr_prev
+    Eigen::Matrix4d mVelocity;// 恒速运动模型，用于位姿预测的 T_curr_prev
 
     // 配置参数
     int mMaxFrames;

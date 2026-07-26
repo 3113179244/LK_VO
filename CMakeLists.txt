@@ -40,6 +40,7 @@ add_library(${PROJECT_NAME}_lib
   src/System.cpp
   src/Tracker.cpp
   src/Viewer.cpp
+  src/DepthFilter.cpp
 )
 
 target_link_libraries(${PROJECT_NAME}_lib

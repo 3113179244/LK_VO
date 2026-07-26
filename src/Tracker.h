@@ -46,6 +46,7 @@ private:
 
     // 4. 关键帧决策：判断是否需要插入新关键帧
     bool NeedNewKeyFrame();
+    
     void CreateNewKeyFrame();
 
 private:

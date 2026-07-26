@@ -27,9 +27,6 @@ private:
     // 全局系统引用
     std::shared_ptr<Map> mpMap;
     std::shared_ptr<Camera> mpCamera;
-
-    // 配置参数
-    int mMinInitFeatures; // 初始化所需的最小有效 3D 点数量
 };
 
 #endif // INITIALIZER_H

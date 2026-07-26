@@ -48,9 +48,6 @@ private:
     bool NeedNewKeyFrame();
     void CreateNewKeyFrame();
 
-    // 5. 更新运动模型：基于恒速模型预测下一帧位姿
-    void UpdateVelocity();
-
 private:
     // 状态机
     eTrackingState mState;

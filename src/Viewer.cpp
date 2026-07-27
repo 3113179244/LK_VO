@@ -1,7 +1,8 @@
 #include "Viewer.h"
-#include "KeyFrame.h"
+#include "Map.h"       
+#include "Frame.h"     
 #include "MapPoint.h"
-
+#include "KeyFrame.h"
 Viewer::Viewer(std::shared_ptr<Map> pMap) : mpMap(pMap), mbFinishRequested(false), mbFinished(false)
 {
     // 初始化可视化参数

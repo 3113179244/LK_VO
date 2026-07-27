@@ -1,5 +1,5 @@
 #include "DepthFilter.h"
-
+#include "Camera.h"
 DepthFilter::DepthFilter(std::shared_ptr<Camera> pCamera)
     : mpCamera(pCamera), mNextSeedId(0) {}
 

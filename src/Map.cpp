@@ -1,5 +1,7 @@
 #include "Map.h"
-
+#include "Map.h"
+#include "Frame.h"
+#include "MapPoint.h"
 Map::Map() : mNumActiveKeyframes(10) {}
 
 void Map::InsertKeyFrame(std::shared_ptr<Frame> frame)

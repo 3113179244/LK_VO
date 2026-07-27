@@ -1,5 +1,6 @@
 #include "MapPoint.h"
-
+#include "MapPoint.h"
+#include "Frame.h"
 MapPoint::MapPoint(const long unsigned int id, const cv::Mat &position)
     : mId(id), mWorldPos(position.clone()), mnObs(0), mbBad(false) {}
 

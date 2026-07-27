@@ -1,5 +1,7 @@
 #include "Frame.h"
-
+#include "Frame.h"
+#include "Camera.h"
+#include "MapPoint.h"
 Frame::Frame(const cv::Mat &imLeft, const cv::Mat &imRight, const double timestamp,
              std::shared_ptr<Camera> camera, const int id)
     : mId(id), mTimeStamp(timestamp), mpCamera(camera),
@@ -32,7 +34,7 @@ Eigen::Vector3f Frame::GetCameraCenter()
     return mOw;
 }
 
-bool Frame::isInFrustum(const MapPoint *pMP, float viewingCosLimit)
+bool Frame::isInFrustum(const MapPoint *pMapPoint, float viewingCosLimit)
 {
     return true;
 }

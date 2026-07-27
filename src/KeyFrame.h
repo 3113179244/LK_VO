@@ -1,3 +1,6 @@
+#ifndef KEYFRAME_H
+#define KEYFRAME_H
+
 #include <opencv2/opencv.hpp>
 #include <Eigen/Core>
 #include <Eigen/Dense>
@@ -5,10 +8,9 @@
 #include <memory>
 #include <mutex>
 #include <map>
-
-class Frame;
-class MapPoint;
-class Camera;
+#include "Frame.h"
+#include "Camera.h"
+#include "Map.h"
 
 class KeyFrame
 {
@@ -86,3 +88,5 @@ private:
     std::mutex mMutexFeatures;    // 保护 MapPoints 的增删改
     std::mutex mMutexConnections; // 保护共视关系的更新
 };
+
+#endif

@@ -7,9 +7,9 @@
 #include <Eigen/Core>
 #include <Eigen/Dense>
 #include <opencv2/opencv.hpp>
-
-class Camera;
-
+#include "Camera.h"
+#include <cmath>
+#include <algorithm>
 // 种子点：记录需要估计深度的像素点及其概率分布
 struct Seed
 {

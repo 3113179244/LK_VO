@@ -1,10 +1,4 @@
 #include "System.h"
-#include "Config.h"
-#include "Camera.h"
-#include "Map.h"
-#include "Tracker.h"
-#include "Viewer.h"
-
 #include <iostream>
 
 System::System(const std::string &strConfigFile, const eSensor sensor, const bool bUseViewer)

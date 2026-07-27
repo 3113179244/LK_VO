@@ -1,6 +1,4 @@
 #include "Frame.h"
-#include "MapPoint.h"
-#include "Camera.h"
 
 Frame::Frame(const cv::Mat &imLeft, const cv::Mat &imRight, const double timestamp,
              std::shared_ptr<Camera> camera, const int id)

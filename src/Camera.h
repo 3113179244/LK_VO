@@ -5,8 +5,7 @@
 #include <Eigen/Dense>
 #include <memory>
 #include <opencv2/opencv.hpp>
-
-class Config;
+#include "Config.h"
 
 class Camera
 {

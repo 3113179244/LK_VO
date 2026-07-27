@@ -5,13 +5,11 @@
 #include <vector>
 #include <ceres/ceres.h>
 #include <sophus/se3.hpp>
-
-// 前向声明
-class Frame;
-class KeyFrame;
-class Map;
-class MapPoint;
-class Camera;
+#include "Frame.h"
+#include "Camera.h"
+#include "Map.h"
+#include "MapPoint.h"
+#include "KeyFrame.h"
 
 class Optimizer {
 public:

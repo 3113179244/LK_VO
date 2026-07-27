@@ -1,13 +1,14 @@
+#ifndef MAPPOINT_H
+#define MAPPOINT_H
+
 #include <opencv2/opencv.hpp>
 #include <map>
 #include <memory>
 #include <mutex>
-
-class Frame; // 前向声明
+#include "Frame.h"
 
 class MapPoint {
 public:
-    // 智能指针定义
     typedef std::shared_ptr<MapPoint> Ptr;
 
     // 构造函数：传入全局唯一ID和初始计算的3D坐标
@@ -57,3 +58,5 @@ private:
     std::mutex mMutexPos;        // 保护 3D 位置
     std::mutex mMutexFeatures;   // 保护观测图的增删改
 };
+
+#endif

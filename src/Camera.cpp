@@ -1,5 +1,4 @@
 #include "Camera.h"
-#include "Config.h"
 
 Camera::Camera()
     : fx(Config::g_dFx0),

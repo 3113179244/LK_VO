@@ -5,9 +5,8 @@
 #include <vector>
 #include <memory>
 #include <mutex>
-
-class Frame;    // 这里通常指代被选为“关键帧”的 Frame
-class MapPoint;
+#include "Frame.h"
+#include "MapPoint.h"
 
 class Map {
 public:

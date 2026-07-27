@@ -1,7 +1,4 @@
 #include "DepthFilter.h"
-#include "Camera.h"
-#include <cmath>
-#include <algorithm>
 
 DepthFilter::DepthFilter(std::shared_ptr<Camera> pCamera)
     : mpCamera(pCamera), mNextSeedId(0) {}

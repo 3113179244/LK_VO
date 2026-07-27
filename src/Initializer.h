@@ -4,11 +4,9 @@
 #include <opencv2/opencv.hpp>
 #include <memory>
 #include <vector>
-
-// 前向声明，避免循环包含
-class Frame;
-class Map;
-class Camera;
+#include "Frame.h"
+#include "Camera.h"
+#include "Map.h"
 
 class Initializer {
 public:

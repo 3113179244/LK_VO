@@ -1,6 +1,4 @@
 #include "Map.h"
-#include "Frame.h"
-#include "MapPoint.h"
 
 Map::Map() : mNumActiveKeyframes(10) {}
 

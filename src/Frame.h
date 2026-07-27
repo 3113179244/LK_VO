@@ -7,9 +7,8 @@
 #include <vector>
 #include <memory>
 #include <mutex>
-
-class Camera;   // 相机内参模型
-class MapPoint; // 3D地图点
+#include "Camera.h"
+#include "MapPoint.h"
 
 class Frame
 {

@@ -8,14 +8,11 @@
 #include <atomic>
 #include <opencv2/opencv.hpp>
 #include <Eigen/Core>
-
-// 前向声明
-class Config;
-class Camera;
-class Map;
-class FeatureDetector;
-class Tracker;
-class Viewer;
+#include "Config.h"
+#include "Camera.h"
+#include "Map.h"
+#include "Tracker.h"
+#include "Viewer.h"
 
 class System {
 public:

@@ -13,7 +13,7 @@ class Camera;
 class Initializer {
 public:
     // 传入全局地图指针，初始化结果将直接写入地图
-    Initializer(std::shared_ptr<Map> pMap, std::shared_ptr<Camera> pCamera);
+    Initializer();
     ~Initializer() = default;
 
     /**
@@ -24,7 +24,6 @@ public:
     bool TryInitialize(std::shared_ptr<Frame> pFrame);
 
 private:
-    // 全局系统引用
     std::shared_ptr<Map> mpMap;
     std::shared_ptr<Camera> mpCamera;
 };

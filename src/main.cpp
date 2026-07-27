@@ -86,23 +86,23 @@ int main(int argc, char **argv)
 
         if (!bIsPaused)
         {
-            cv::Mat matImgLeft = cv::imread(strLeftImgPath, cv::IMREAD_GRAYSCALE);
-            cv::Mat matImgRight = cv::imread(strRightImgPath, cv::IMREAD_GRAYSCALE);
+            cv::Mat image0 = cv::imread(strLeftImgPath, cv::IMREAD_GRAYSCALE);
+            cv::Mat image1 = cv::imread(strRightImgPath, cv::IMREAD_GRAYSCALE);
 
-            if (matImgLeft.empty() || matImgRight.empty())
+            if (image0.empty() || image1.empty())
             {
                 std::cerr << "错误: 无法读取图像: " << strFilename << std::endl;
                 break;
             }
 
-            double dCurrentTimestamp = vdTimestamps[nFrameId];
+            double dTimestamp = vdTimestamps[nFrameId];
 
             // 将图像和时间戳传给 VO 系统进行双目跟踪和位姿估计
-            Eigen::Matrix4f mTcw = SLAM.TrackStereo(matImgLeft, matImgRight, dCurrentTimestamp);
+            Eigen::Matrix4d mTcw = SLAM.TrackStereo(vdTimestamps[nFrameId], image0, image1);
             // 拼接上下图像（垂直拼接）
-            cv::Mat matStereoDisplay;
-            cv::vconcat(matImgLeft, matImgRight, matStereoDisplay);
-            cv::imshow("Top (Left) / Bottom (Right)", matStereoDisplay);
+            cv::Mat matDisplay;
+            cv::vconcat(image0, image1, matDisplay);
+            cv::imshow("Top (Left) / Bottom (Right)", matDisplay);
             nFrameId++;
         }
         int nWaitTime = bIsPaused ? 10 : 20;

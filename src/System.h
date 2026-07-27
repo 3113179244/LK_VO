@@ -19,47 +19,36 @@ class Viewer;
 
 class System {
 public:
-    enum Sensor {
+    enum eSensor {
         MONOCULAR = 0,
         STEREO = 1,
         RGBD = 2
     };
 
 public:
-    System(const std::string &strConfigFile, const Sensor sensor = STEREO, const bool bUseViewer = true);
+    // 适配 main.cpp 的调用，默认传感器类型为 STEREO
+    System(const std::string &strConfigFile, const eSensor sensor = STEREO, const bool bUseViewer = true);
     ~System();
 
-    // 跟踪接口
-    Eigen::Matrix4f TrackStereo(const cv::Mat &imLeft, const cv::Mat &imRight, const double &timestamp);
+    // 双目跟踪接口（转接至 Tracker）
+    Eigen::Matrix4d TrackStereo(const double &timestamp, const cv::Mat &image0, const cv::Mat &image1);
 
     // 线程管理核心接口
     void Shutdown();
     bool IsShutDown() const { return mbShutdown.load(); }
 
-    std::shared_ptr<Map> GetMap() const { return mpMap; }
-
 private:
-    // 初始化子线程
     void StartThreads();
 
 private:
-    Sensor mSensor;
+    eSensor mSensor;
     bool mbUseViewer;
     std::atomic<bool> mbShutdown; // 原子类型标志位，保证多线程状态同步
-
-    // SLAM 核心模块组件
-    std::shared_ptr<Camera> mpCamera0;
-    std::shared_ptr<Camera> mpCamera1;
+    std::shared_ptr<Camera> mpCamera;
     std::shared_ptr<Map> mpMap;
-    std::shared_ptr<FeatureDetector> mpTrackerDetector;
     std::shared_ptr<Tracker> mpTracker;
     std::shared_ptr<Viewer> mpViewer;
-
-    // 线程管理对象 (使用 std::unique_ptr 智能指针实现 RAII)
-    std::unique_ptr<std::thread> mptViewer;
-    // std::unique_ptr<std::thread> mptBackend; // 预留后端优化线程
-    
-    mutable std::mutex mMutexReset;
+    std::unique_ptr<std::thread> mpViewerThread;
 };
 
 #endif // SYSTEM_H

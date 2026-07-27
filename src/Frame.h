@@ -31,7 +31,6 @@ public:
     // 判断某个特征点是否在视野内
     bool isInFrustum(const MapPoint *pMP, float viewingCosLimit);
 
-public:
     long unsigned int mId; // 帧的唯一ID
     double mTimeStamp;     // 时间戳
     std::shared_ptr<Camera> mpCamera; // 相机模型（包含焦距 fx, fy, cx, cy, 畸变参数）
@@ -53,8 +52,7 @@ public:
     std::vector<std::shared_ptr<MapPoint>> mvpMapPoints;
     // 记录特征点是否为外点 (Outlier)，在优化时标记
     std::vector<bool> mvbOutlier;
-
-private:
+    
     std::mutex mMutexPose; // 保护位姿更新的互斥锁
 };
 

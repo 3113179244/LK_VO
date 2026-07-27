@@ -8,10 +8,7 @@ class FeatureDetector
 {
 public:
     FeatureDetector();
-
     void TrackImage(const double &timestamp, const cv::Mat &_currImgLeft, const cv::Mat &_currImgRight);
-
-    // Getter 声明
     const std::vector<int> &getTrackIds() const;
     const std::vector<cv::Point2f> &getCurrPtsLeft() const;
     const std::vector<cv::Point2f> &getCurrPtsRight() const;
@@ -25,8 +22,6 @@ private:
     void TrackStereo();             // 追踪当前帧左图到右图
     void FilterStereoMismatch();    // 过滤左右目的误匹配点
     bool inBorder(const cv::Point2f &pt, int cols, int rows);
-
-private:
     // 图像缓存
     cv::Mat prevImgLeft;
     cv::Mat currImgLeft;

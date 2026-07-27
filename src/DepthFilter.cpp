@@ -9,7 +9,8 @@ DepthFilter::DepthFilter(std::shared_ptr<Camera> pCamera)
 void DepthFilter::AddSeed(const Eigen::Vector2f &pt, float init_depth, float min_depth)
 {
     std::unique_lock<std::mutex> lock(mMutexSeeds);
-    Eigen::Vector3f f = mpCamera->Pixel2Camera(pt);
+    // 将求出的 Vector3d 显式转换为 Vector3f 供 Seed 结构体使用
+    Eigen::Vector3f f = mpCamera->Pixel2Camera(pt.cast<double>()).cast<float>();
     mvSeeds.emplace_back(mNextSeedId++, pt, f, init_depth, min_depth);
 }
 
@@ -22,7 +23,7 @@ void DepthFilter::Update(const cv::Mat &cur_img, const Eigen::Matrix4f &T_cur_re
         if (seed.is_converged)
             continue;
 
-        Eigen::Vector2f best_px;
+        Eigen::Vector2d best_px = Eigen::Vector2d::Zero();
         float tau_inv = 0.0f;
         float sigma2_tau = 0.0f;
 
@@ -41,8 +42,9 @@ void DepthFilter::Update(const cv::Mat &cur_img, const Eigen::Matrix4f &T_cur_re
     }
 }
 
+// 注意：加上 DepthFilter:: 类作用域修饰符
 bool DepthFilter::EpipolarSearch(const Seed &seed, const cv::Mat &cur_img, const Eigen::Matrix4f &T_cur_ref,
-                                 Eigen::Vector2f &best_curr_px, float &tau_inv, float &sigma2_tau)
+                                 Eigen::Vector2d &best_curr_px, float &depth_best, float &variance_best)
 {
     Eigen::Matrix3f R_cur_ref = T_cur_ref.block<3, 3>(0, 0);
     Eigen::Vector3f t_cur_ref = T_cur_ref.block<3, 1>(0, 3);
@@ -57,27 +59,28 @@ bool DepthFilter::EpipolarSearch(const Seed &seed, const cv::Mat &cur_img, const
     if (P_min.z() <= 0.0f || P_max.z() <= 0.0f)
         return false;
 
-    Eigen::Vector2f px_min = mpCamera->Camera2Pixel(P_min);
-    Eigen::Vector2f px_max = mpCamera->Camera2Pixel(P_max);
+    // Camera2Pixel 接受 Vector3d 返回 Vector2d
+    Eigen::Vector2d px_min = mpCamera->Camera2Pixel(P_min.cast<double>());
+    Eigen::Vector2d px_max = mpCamera->Camera2Pixel(P_max.cast<double>());
 
-    Eigen::Vector2f epipolar_dir = px_max - px_min;
-    float epipolar_length = epipolar_dir.norm();
-    if (epipolar_length < 1.0f)
+    Eigen::Vector2d epipolar_dir = px_max - px_min;
+    double epipolar_length = epipolar_dir.norm();
+    if (epipolar_length < 1.0)
         return false; // 视差太小，不具备测量能力
 
     epipolar_dir /= epipolar_length;
 
     // 沿极线步长搜索 NCC 最佳匹配点
     float best_ncc = -1.0f;
-    Eigen::Vector2f best_pt = px_min;
+    Eigen::Vector2d best_pt = px_min;
 
-    for (float l = 0; l <= epipolar_length; l += 0.7f)
+    for (double l = 0.0; l <= epipolar_length; l += 0.7)
     {
-        Eigen::Vector2f pt = px_min + l * epipolar_dir;
+        Eigen::Vector2d pt = px_min + l * epipolar_dir;
         if (pt.x() < 5 || pt.x() >= cur_img.cols - 5 || pt.y() < 5 || pt.y() >= cur_img.rows - 5)
             continue;
 
-        float ncc = ComputeNCC(mRefImg, cur_img, seed.px, pt);
+        float ncc = ComputeNCC(mRefImg, cur_img, seed.px, pt.cast<float>());
         if (ncc > best_ncc)
         {
             best_ncc = ncc;
@@ -91,18 +94,17 @@ bool DepthFilter::EpipolarSearch(const Seed &seed, const cv::Mat &cur_img, const
     best_curr_px = best_pt;
 
     // 根据几何匹配算出的三角化深度，计算对应的逆深度 tau_inv
-    // 此处简化为使用极线线段两端点按比例插值 (也可使用齐次三角化计算)
-    float match_dist = (best_curr_px - px_min).norm();
-    float ratio = match_dist / epipolar_length;
+    float match_dist = static_cast<float>((best_curr_px - px_min).norm());
+    float ratio = match_dist / static_cast<float>(epipolar_length);
     float z_meas = 1.0f / ((1.0f - ratio) * (1.0f / d_min) + ratio * (1.0f / d_max));
 
-    tau_inv = 1.0f / z_meas;
+    depth_best = 1.0f / z_meas; // 即 tau_inv
 
     // 根据一个像素的几何不确定性反算逆深度的测量方差 sigma2_tau
-    float z_meas_px_plus = 1.0f / ((1.0f - std::min(1.0f, ratio + 1.0f / epipolar_length)) * (1.0f / d_min) +
-                                   std::min(1.0f, ratio + 1.0f / epipolar_length) * (1.0f / d_max));
+    float z_meas_px_plus = 1.0f / ((1.0f - std::min(1.0f, ratio + 1.0f / static_cast<float>(epipolar_length))) * (1.0f / d_min) +
+                                   std::min(1.0f, ratio + 1.0f / static_cast<float>(epipolar_length)) * (1.0f / d_max));
     float tau_meas_px_plus = 1.0f / z_meas_px_plus;
-    sigma2_tau = (tau_meas_px_plus - tau_inv) * (tau_meas_px_plus - tau_inv);
+    variance_best = (tau_meas_px_plus - depth_best) * (tau_meas_px_plus - depth_best);
 
     return true;
 }

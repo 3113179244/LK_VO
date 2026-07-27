@@ -68,7 +68,7 @@ private:
      * @brief 极线搜索与 NCC 匹配
      */
     bool EpipolarSearch(const Seed &seed, const cv::Mat &cur_img, const Eigen::Matrix4f &T_cur_ref,
-                        Eigen::Vector2f &best_curr_px, float &tau_inv, float &sigma2_tau);
+                        Eigen::Vector2d &best_curr_px, float &depth_best, float &variance_best);
 
     /**
      * @brief 贝叶斯概率更新（高斯-均匀混合模型 / Vogiatzis 算法）

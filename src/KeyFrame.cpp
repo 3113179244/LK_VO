@@ -4,9 +4,12 @@
 #include "Camera.h"
 
 KeyFrame::KeyFrame(std::shared_ptr<Frame> pFrame)
-    : mId(pFrame->mId), mFrameId(pFrame->mId), mTimeStamp(pFrame->mTimeStamp),
-      mpCamera(pFrame->mpCamera), mbf(pFrame->mbf), N(pFrame->N),
-      mvKeysLeft(pFrame->mvKeys), mvpMapPoints(pFrame->mvpMapPoints)
+    : mId(pFrame->mFrameId), 
+      mFrameId(pFrame->mFrameId), 
+      mTimeStamp(pFrame->mTimeStamp), 
+      N(pFrame->iFeaturePointnums), 
+      mvKeysLeft(pFrame->mvleftpixel), 
+      mvpMapPoints(pFrame->mvpMapPoints)
 {
     SetPose(pFrame->GetPose());
 }

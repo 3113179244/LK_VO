@@ -17,8 +17,7 @@ class Frame
 public:
     typedef std::shared_ptr<Frame> Ptr;
 
-    Frame(const cv::Mat &imLeft, const cv::Mat &imRight, const double timestamp,
-          std::shared_ptr<Camera> camera, const int id);
+    Frame(const cv::Mat &image0, const cv::Mat &image1, const double dtimestamp, const int FrameId);
 
     void SetPose(const Eigen::Matrix4f &Tcw);
     Eigen::Matrix4f GetPose();
@@ -26,24 +25,20 @@ public:
 
     bool isInFrustum(const MapPoint *pMapPoint, float viewingCosLimit);
 
-    long unsigned int mId;
+    unsigned long int mFrameId;//帧图像的全局唯一身份证号
     double mTimeStamp;
-    std::shared_ptr<Camera> mpCamera;
-    float mbf;
-    Eigen::Matrix4f mTcw;
-    Eigen::Matrix3f mRcw;
-    Eigen::Vector3f mtcw;
-    Eigen::Matrix3f mRwc;
-    Eigen::Vector3f mOw;
+    Eigen::Matrix4f mTcw; //世界坐标系到当前相机坐标系的旋转平移矩阵
+    Eigen::Matrix3f mRcw; //世界坐标系到当前相机坐标系的旋转矩阵
+    Eigen::Vector3f mtcw; //世界坐标系到当前相机坐标系的平移向量
+    Eigen::Matrix3f mRwc; //相机坐标系到世界坐标系的旋转矩阵
+    Eigen::Vector3f mOw; //相机光心在世界坐标系下的3D物理坐标。
 
-    int N;
-    std::vector<cv::KeyPoint> mvKeys;
-    std::vector<cv::KeyPoint> mvKeysRight;
-
-    std::vector<float> mvuRight;
-    std::vector<float> mvDepth;
-    std::vector<std::shared_ptr<MapPoint>> mvpMapPoints;
-    std::vector<bool> mvbOutlier;
+    int iFeaturePointnums;//当前帧的特征点数量
+    std::vector<cv::KeyPoint> mvleftpixel;// 第 i 个 2D 像素点
+    std::vector<cv::KeyPoint> mvrightpixel;// 第 i 个 2D 像素点
+    std::vector<float> mvInverseDepth;// 第 i 个点的逆深度
+    std::vector<std::shared_ptr<MapPoint>> mvpMapPoints;// 第 i 个点对应的 3D 地图点
+    std::vector<bool> mvbOutlier;//误匹配/坏点标记列表
     
     std::mutex mMutexPose;
 };

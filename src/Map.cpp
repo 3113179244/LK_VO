@@ -7,8 +7,8 @@ Map::Map() : mNumActiveKeyframes(10) {}
 void Map::InsertKeyFrame(std::shared_ptr<Frame> frame)
 {
     std::unique_lock<std::mutex> lock(mMutexMap);
-    mKeyFrames[frame->mId] = frame;
-    mActiveKeyFrames[frame->mId] = frame;
+    mKeyFrames[frame->mFrameId] = frame;
+    mActiveKeyFrames[frame->mFrameId] = frame;
 }
 
 void Map::InsertMapPoint(std::shared_ptr<MapPoint> map_point)

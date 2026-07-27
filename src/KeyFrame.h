@@ -43,7 +43,6 @@ public:
     const double mTimeStamp;
 
     std::shared_ptr<Camera> mpCamera;
-    const float mbf;
     const int N;
 
     std::vector<cv::KeyPoint> mvKeysLeft;

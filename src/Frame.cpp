@@ -2,12 +2,10 @@
 #include "Frame.h"
 #include "Camera.h"
 #include "MapPoint.h"
-Frame::Frame(const cv::Mat &imLeft, const cv::Mat &imRight, const double timestamp,
-             std::shared_ptr<Camera> camera, const int id)
-    : mId(id), mTimeStamp(timestamp), mpCamera(camera),
-      mTcw(Eigen::Matrix4f::Identity()) 
+Frame::Frame(const cv::Mat &image0, const cv::Mat &image1, const double dtimestamp, const int FrameId)
+    : mFrameId(FrameId), mTimeStamp(dtimestamp), mTcw(Eigen::Matrix4f::Identity()) 
 {
-    mbf = camera->mBaseline * camera->fx;
+
 }
 
 void Frame::SetPose(const Eigen::Matrix4f &Tcw)

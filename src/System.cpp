@@ -13,8 +13,9 @@ System::System(const std::string &strConfigFile, const eSensor sensor, const boo
     Config::setParameterFile(strConfigFile);
 
     // 初始化 Tracking 核心追踪器
+    mpCamera = std::make_shared<Camera>();
     mpTracker = std::make_shared<Tracker>(mpCamera, mpMap);
-
+    mpMap = std::make_shared<Map>();
     // 初始化 Viewer 并启动子线程
     if (mbUseViewer)
     {
@@ -33,22 +34,18 @@ System::~System()
     }
 }
 
-Eigen::Matrix4d System::TrackStereo(const double &timestamp, const cv::Mat &image0, const cv::Mat &image1)
+Eigen::Matrix4d System::TrackStereo(const double &timestamp, const cv::Mat &image0, const cv::Mat &image1, cv::Mat &matDisplay)
 {
     if (mSensor != STEREO)
     {
         std::cerr << "错误: 当前系统未设置为 STEREO 双目模式！" << std::endl;
-        return Eigen::Matrix4d::Identity();
     }
 
     if (mbShutdown.load())
     {
         std::cerr << "系统已关闭，拒绝处理新图像。" << std::endl;
-        return Eigen::Matrix4d::Identity();
     }
-
-    // 调用 Tracker 进行位姿估计 (Tracker::GrabImageStereo 返回 Matrix4d)
-    Eigen::Matrix4d Tcw = mpTracker->GrabImageStereo(timestamp, image0, image1);
+    Eigen::Matrix4d Tcw = mpTracker->GrabImageStereo(timestamp, image0, image1, matDisplay);
 
     return Tcw;
 }

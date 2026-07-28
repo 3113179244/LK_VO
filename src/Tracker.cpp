@@ -4,10 +4,27 @@
 // 实现构造函数
 Tracker::Tracker(std::shared_ptr<Camera> pCamera, std::shared_ptr<Map> pMap)
 {
+    mpFeatureDetector = std::make_shared<FeatureDetector>();
     std::cout << "[Tracker] Initialized successfully." << std::endl;
 }
 
-Eigen::Matrix4d Tracker::GrabImageStereo(const double timestamp, const cv::Mat& image0, const cv::Mat& image1)
+Eigen::Matrix4d Tracker::GrabImageStereo(const double timestamp, const cv::Mat &image0, const cv::Mat &image1, cv::Mat &matDisplay)
 {
+    mpCurrFrame = std::make_shared<Frame>(timestamp, image0, image1, mNextFrameId++);
+
+    // 提取与追踪特征点
+    if (mpFeatureDetector)
+    {
+        mpFeatureDetector->TrackImage(mpPrevFrame, mpCurrFrame, image0, image1);
+        mpFeatureDetector->DrawFeaturesOnImage(
+            image0,
+            image1,
+            mpCurrFrame->mvleftpixel,
+            mpCurrFrame->mvrightpixel,
+            matDisplay);
+    }
+
+    mpPrevFrame = mpCurrFrame;
+
     return Eigen::Matrix4d::Identity();
 }

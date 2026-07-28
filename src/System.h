@@ -27,7 +27,7 @@ public:
     System(const std::string &strConfigFile, const eSensor sensor = STEREO, const bool bUseViewer = true);
     ~System();
 
-    Eigen::Matrix4d TrackStereo(const double &timestamp, const cv::Mat &image0, const cv::Mat &image1);
+    Eigen::Matrix4d TrackStereo(const double &timestamp, const cv::Mat &image0, const cv::Mat &image1, cv::Mat &matTrackDisplay);
 
     void Shutdown();
     bool IsShutDown() const { return mbShutdown.load(); }

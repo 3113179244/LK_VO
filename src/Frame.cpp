@@ -2,7 +2,7 @@
 #include "Frame.h"
 #include "Camera.h"
 #include "MapPoint.h"
-Frame::Frame(const cv::Mat &image0, const cv::Mat &image1, const double dtimestamp, const int FrameId)
+Frame::Frame(const double dtimestamp, const cv::Mat &image0, const cv::Mat &image1, const int FrameId)
     : mFrameId(FrameId), mTimeStamp(dtimestamp), mTcw(Eigen::Matrix4f::Identity()) 
 {
 

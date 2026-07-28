@@ -138,9 +138,12 @@ void FeatureDetector::SetMask(std::shared_ptr<Frame> currFrame, int width, int h
     // 遍历当前已有的特征点，在其周围画半径为 minFeatureDist 的黑色实心圆 (0)
     for (const auto &kp : currFrame->mvleftpixel)
     {
-        if (mask.at<uchar>(kp.pt) == 255)
+        if (inBorder(kp.pt, width, height))
         {
-            cv::circle(mask, kp.pt, minFeatureDist, 0, -1);
+            if (mask.at<uchar>(kp.pt) == 255)
+            {
+                cv::circle(mask, kp.pt, minFeatureDist, 0, -1);
+            }
         }
     }
 }
@@ -263,10 +266,10 @@ bool FeatureDetector::inBorder(const cv::Point2f &pt, int cols, int rows)
            BORDER_SIZE <= img_y && img_y < rows - BORDER_SIZE;
 }
 
-void DrawFeaturesOnImage(const cv::Mat& imgLeft, const cv::Mat& imgRight, 
-                         const std::vector<cv::KeyPoint>& leftKeys, 
-                         const std::vector<cv::KeyPoint>& rightKeys, 
-                         cv::Mat& outDisplay)
+void FeatureDetector::DrawFeaturesOnImage(const cv::Mat &imgLeft, const cv::Mat &imgRight,
+                                          const std::vector<cv::KeyPoint> &leftKeys,
+                                          const std::vector<cv::KeyPoint> &rightKeys,
+                                          cv::Mat &outDisplay)
 {
     cv::Mat colorLeft, colorRight;
 
@@ -282,13 +285,13 @@ void DrawFeaturesOnImage(const cv::Mat& imgLeft, const cv::Mat& imgRight,
         colorRight = imgRight.clone();
 
     // 绘制左图特征点（绿点）
-    for (const auto& kp : leftKeys)
+    for (const auto &kp : leftKeys)
     {
         cv::circle(colorLeft, kp.pt, 3, cv::Scalar(0, 255, 0), -1);
     }
 
     // 绘制右图特征点（黄点）
-    for (const auto& kp : rightKeys)
+    for (const auto &kp : rightKeys)
     {
         if (kp.pt.x >= 0 && kp.pt.y >= 0) // 过滤掉无效的点 (-1, -1)
         {

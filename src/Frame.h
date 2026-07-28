@@ -18,7 +18,7 @@ class Frame
 public:
     typedef std::shared_ptr<Frame> Ptr;
 
-    Frame(const cv::Mat &image0, const cv::Mat &image1, const double dtimestamp, const int FrameId);
+    Frame(const double dtimestamp, const cv::Mat &image0, const cv::Mat &image1, const int FrameId);
 
     void SetPose(const Eigen::Matrix4f &Tcw);
     Eigen::Matrix4f GetPose();

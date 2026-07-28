@@ -36,7 +36,7 @@ int main(int argc, char **argv)
     std::string strTimesPath = strSequenceDir + "times.txt";
 
     // 初始化 VO 系统
-    System SLAM(strConfigFile, System::STEREO, true);
+    System SLAM(strConfigFile, System::STEREO, false);
 
     // 检查路径
     if (!cv::utils::fs::exists(strLeftDir) || !cv::utils::fs::exists(strRightDir))
@@ -96,12 +96,9 @@ int main(int argc, char **argv)
             }
 
             double dTimestamp = vdTimestamps[nFrameId];
-
-            // 将图像和时间戳传给 VO 系统进行双目跟踪和位姿估计
-            Eigen::Matrix4d mTcw = SLAM.TrackStereo(vdTimestamps[nFrameId], image0, image1);
-            // 拼接上下图像（垂直拼接）
             cv::Mat matDisplay;
-            cv::vconcat(image0, image1, matDisplay);
+            // 将图像和时间戳传给 VO 系统进行双目跟踪和位姿估计
+            Eigen::Matrix4d mTcw = SLAM.TrackStereo(vdTimestamps[nFrameId], image0, image1, matDisplay);
             cv::imshow("Top (Left) / Bottom (Right)", matDisplay);
             nFrameId++;
         }

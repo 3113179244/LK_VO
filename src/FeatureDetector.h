@@ -3,42 +3,78 @@
 
 #include <opencv2/opencv.hpp>
 #include <vector>
+#include <memory>
 
+// 前向声明，避免头文件循环引用
+class Frame;
+
+/**
+ * @brief 特征点检测与追踪类
+ * 负责帧间光流追踪、特征点检测、屏蔽掩码生成以及双目匹配与外点剔除
+ */
 class FeatureDetector
 {
 public:
     FeatureDetector();
-    void TrackImage(const double &timestamp, const cv::Mat &_currImgLeft, const cv::Mat &_currImgRight);
-    const std::vector<int> &getTrackIds() const;
-    const std::vector<cv::Point2f> &getCurrPtsLeft() const;
-    const std::vector<cv::Point2f> &getCurrPtsRight() const;
-    const std::vector<int> &getTrackCnt() const;
+
+    /**
+     * @brief 前端图像处理主接口（图像追踪与特征提取流程控制）
+     * @param prevFrame 上一帧指针
+     * @param currFrame 当前帧指针
+     * @param currImgLeft 当前帧左目图像
+     * @param currImgRight 当前帧右目图像（单目时可传入空 Mat）
+     */
+    void TrackImage(std::shared_ptr<Frame> prevFrame,
+                    std::shared_ptr<Frame> currFrame,
+                    const cv::Mat &currImgLeft,
+                    const cv::Mat &currImgRight);
 
 private:
-    void TrackPrevLeftToCurrLeft(); // 追踪上一帧左图到当前帧左图
-    void SortPointsByTrackCount();  // 按追踪次数对特征点排序（老点在前）
-    void SetMask();                 // 在已有特征点周围设置黑圈遮罩
-    void DetectNewFeatures();       // 在空白区域提取新的特征点
-    void TrackStereo();             // 追踪当前帧左图到右图
-    void FilterStereoMismatch();    // 过滤左右目的误匹配点
+    /**
+     * @brief 利用 LK 金字塔光流算法计算上一帧左图到当前帧左图的特征追踪
+     */
+    void TrackPrevLeftToCurrLeft(std::shared_ptr<Frame> prevFrame,
+                                 std::shared_ptr<Frame> currFrame,
+                                 const cv::Mat &prevImg,
+                                 const cv::Mat &currImg);
+
+    /**
+     * @brief 根据追踪次数（Track Count）对当前帧的特征点进行降序排序
+     * 作用：保证被追踪时间更长的稳定特征点优先被保留和使用
+     */
+    void SortPointsByTrackCount(std::shared_ptr<Frame> currFrame);
+
+    /**
+     * @brief 设置特征点提取掩码（Mask）
+     * 在现有特征点周围绘制圆形遮罩，防止新提取的特征点过于密集
+     */
+    void SetMask(std::shared_ptr<Frame> currFrame, int width, int height);
+
+    /**
+     * @brief 在掩码允许的区域内，补充提取新的角点（GoodFeaturesToTrack）
+     */
+    void DetectNewFeatures(std::shared_ptr<Frame> currFrame, const cv::Mat &currImg);
+
+    /**
+     * @brief 左右目图像间的双目光流匹配
+     */
+    void TrackStereo(std::shared_ptr<Frame> currFrame, const cv::Mat &currImgLeft, const cv::Mat &currImgRight);
+
+    /**
+     * @brief 通过基础矩阵 (RANSAC) 过滤左右目之间的双目误匹配点
+     */
+    void FilterStereoMismatch(std::shared_ptr<Frame> currFrame);
+
+    /**
+     * @brief 检查像素点坐标是否位于图像有效边界内（防止光流越界）
+     */
     bool inBorder(const cv::Point2f &pt, int cols, int rows);
-    // 图像缓存
-    cv::Mat prevImgLeft;
-    cv::Mat currImgLeft;
-    cv::Mat currImgRight;
 
-    // 2. 清理了重复定义的成员变量，只留一份
-    std::vector<int> trackIds;             // 特征点 ID
-    std::vector<cv::Point2f> prevPtsLeft;  // 上一帧左目坐标
-    std::vector<cv::Point2f> currPtsLeft;  // 当前帧左目坐标
-    std::vector<cv::Point2f> currPtsRight; // 当前帧右目坐标
-    std::vector<int> trackCnt;             // 连续追踪次数
+    cv::Mat mask; ///< 特征点提取时的遮罩掩码矩阵
 
-    cv::Mat mask;
-
-    int maxFeatures;
-    int minFeatureDist;
-    static int nextFeatureId;
+    int maxFeatures;          ///< 图像中维持的最大特征点数量
+    int minFeatureDist;       ///< 特征点之间的最小像素距离
+    static int nextFeatureId; ///< 用于给新提取特征点分配的全局递增 ID
 };
 
 #endif // FEATURE_DETECTOR_H

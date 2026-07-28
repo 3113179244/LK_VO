@@ -28,7 +28,10 @@ public:
                     std::shared_ptr<Frame> currFrame,
                     const cv::Mat &currImgLeft,
                     const cv::Mat &currImgRight);
-
+    void DrawFeaturesOnImage(const cv::Mat& imgLeft, const cv::Mat& imgRight, 
+                         const std::vector<cv::KeyPoint>& leftKeys, 
+                         const std::vector<cv::KeyPoint>& rightKeys, 
+                         cv::Mat& outDisplay);
 private:
     /**
      * @brief 利用 LK 金字塔光流算法计算上一帧左图到当前帧左图的特征追踪

@@ -32,7 +32,6 @@ add_library(${PROJECT_NAME}_lib
   src/Config.cpp
   src/FeatureDetector.cpp
   src/Frame.cpp
-  src/Initializer.cpp
   src/KeyFrame.cpp
   src/Map.cpp
   src/MapPoint.cpp

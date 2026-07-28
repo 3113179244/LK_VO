@@ -262,3 +262,40 @@ bool FeatureDetector::inBorder(const cv::Point2f &pt, int cols, int rows)
     return BORDER_SIZE <= img_x && img_x < cols - BORDER_SIZE &&
            BORDER_SIZE <= img_y && img_y < rows - BORDER_SIZE;
 }
+
+void DrawFeaturesOnImage(const cv::Mat& imgLeft, const cv::Mat& imgRight, 
+                         const std::vector<cv::KeyPoint>& leftKeys, 
+                         const std::vector<cv::KeyPoint>& rightKeys, 
+                         cv::Mat& outDisplay)
+{
+    cv::Mat colorLeft, colorRight;
+
+    // 转为 3 通道 BGR 彩色图
+    if (imgLeft.channels() == 1)
+        cv::cvtColor(imgLeft, colorLeft, cv::COLOR_GRAY2BGR);
+    else
+        colorLeft = imgLeft.clone();
+
+    if (imgRight.channels() == 1)
+        cv::cvtColor(imgRight, colorRight, cv::COLOR_GRAY2BGR);
+    else
+        colorRight = imgRight.clone();
+
+    // 绘制左图特征点（绿点）
+    for (const auto& kp : leftKeys)
+    {
+        cv::circle(colorLeft, kp.pt, 3, cv::Scalar(0, 255, 0), -1);
+    }
+
+    // 绘制右图特征点（黄点）
+    for (const auto& kp : rightKeys)
+    {
+        if (kp.pt.x >= 0 && kp.pt.y >= 0) // 过滤掉无效的点 (-1, -1)
+        {
+            cv::circle(colorRight, kp.pt, 3, cv::Scalar(0, 255, 255), -1);
+        }
+    }
+
+    // 上下拼接并输出
+    cv::vconcat(colorLeft, colorRight, outDisplay);
+}

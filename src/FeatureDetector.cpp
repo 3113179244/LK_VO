@@ -14,7 +14,6 @@ FeatureDetector::FeatureDetector()
 {
     maxFeatures = Config::get<int>("max_cnt");     // 帧内最大特征点数
     minFeatureDist = Config::get<int>("min_dist"); // 特征点间最小距离（像素）
-    clahe = cv::createCLAHE(3.0, cv::Size(8, 8));
 }
 
 /**
@@ -28,30 +27,24 @@ void FeatureDetector::TrackImage(std::shared_ptr<Frame> prevFrame,
 {
     if (!currFrame)
         return;
-    cv::Mat prevImgLeftClahe, currImgLeftClahe, currImgRightClahe;
-    if (!prevImgLeft.empty())
-        clahe->apply(prevImgLeft, prevImgLeftClahe);
-    if (!currImgLeft.empty())
-        clahe->apply(currImgLeft, currImgLeftClahe);
-    if (!currImgRight.empty())
-        clahe->apply(currImgRight, currImgRightClahe);
+
     // 若有上一帧，可在此执行前后帧光流跟踪 (需要传入上一帧左图 prevImg)
-    if (prevFrame && !prevImgLeftClahe.empty())
+    if (prevFrame && !prevImgLeft.empty())
     {
-        TrackPrevLeftToCurrLeft(prevFrame, currFrame, prevImgLeftClahe, currImgLeftClahe);
+        TrackPrevLeftToCurrLeft(prevFrame, currFrame, prevImgLeft, currImgLeft);
     }
 
     // 将当前已有特征点按追踪次数（稳定度）降序排序
     SortPointsByTrackCount(currFrame);
 
     // 在已有特征点四周生成 Mask（避免点过于密集），然后补充提取新角点
-    SetMask(currFrame, currImgLeftClahe.cols, currImgLeftClahe.rows);
-    DetectNewFeatures(currFrame, currImgLeftClahe);
+    SetMask(currFrame, currImgLeft.cols, currImgLeft.rows);
+    DetectNewFeatures(currFrame, currImgLeft);
 
     // 若传入了右目图像，则进行双目光流匹配，并利用 RANSAC 基础矩阵剔除错配
     if (!currImgRight.empty())
     {
-        TrackStereo(currFrame, currImgLeftClahe, currImgRightClahe);
+        TrackStereo(currFrame, currImgLeft, currImgRight);
         FilterStereoMismatch(currFrame);
     }
 }
@@ -85,16 +78,47 @@ void FeatureDetector::TrackPrevLeftToCurrLeft(std::shared_ptr<Frame> prevFrame,
     currFrame->mvFeatureIds.clear();
     currFrame->mvTrackCnt.clear();
 
+    // 临时容器，用于存放过滤后的点 
+    std::vector<cv::KeyPoint> filteredPts;
+    std::vector<int> filteredIds;
+    std::vector<int> filteredCnt;
+    // 预分配内存提高性能
+    filteredPts.reserve(status.size());
+    filteredIds.reserve(status.size());
+    filteredCnt.reserve(status.size());
     // 遍历光流结果，筛选成功追踪且在图像有效边界内的特征点
     for (size_t i = 0; i < status.size(); ++i)
     {
         if (status[i] && inBorder(currPts[i], currImg.cols, currImg.rows))
         {
-            currFrame->mvleftpixel.push_back(cv::KeyPoint(currPts[i], 1.0f));
-            currFrame->mvFeatureIds.push_back(prevFrame->mvFeatureIds[i]); // 继承上一帧的点 ID
-            currFrame->mvTrackCnt.push_back(prevFrame->mvTrackCnt[i] + 1); // 连续被追踪次数 + 1
+            cv::Point2f pt = currPts[i];
+
+            bool tooClose = false;
+            // 遍历已经筛选通过（即将保留）的点，看距离是否太近
+            for (const auto &exist_kp : filteredPts)
+            {
+                if (cv::norm(pt - exist_kp.pt) < minFeatureDist)
+                {
+                    tooClose = true;
+                    break;
+                }
+            }
+            if (tooClose)
+            {
+                continue; // 距离太近，直接丢弃这个追踪点
+            }
+
+            // 通过检查，存入临时容器
+            filteredPts.push_back(cv::KeyPoint(pt, 1.0f));
+            filteredIds.push_back(prevFrame->mvFeatureIds[i]);
+            filteredCnt.push_back(prevFrame->mvTrackCnt[i] + 1);
         }
     }
+
+    currFrame->mvleftpixel = std::move(filteredPts);
+    currFrame->mvFeatureIds = std::move(filteredIds);
+    currFrame->mvTrackCnt = std::move(filteredCnt);
+
     // 更新当前帧记录的特征点总数
     currFrame->iFeaturePointnums = static_cast<int>(currFrame->mvleftpixel.size());
 }
@@ -151,10 +175,8 @@ void FeatureDetector::SetMask(std::shared_ptr<Frame> currFrame, int width, int h
     {
         if (inBorder(kp.pt, width, height))
         {
-            if (mask.at<uchar>(kp.pt) == 255)
-            {
-                cv::circle(mask, kp.pt, minFeatureDist, 0, -1);
-            }
+
+            cv::circle(mask, kp.pt, minFeatureDist, 0, -1);
         }
     }
 }
@@ -299,7 +321,7 @@ void FeatureDetector::DrawFeaturesOnImage(const cv::Mat &imgLeft, const cv::Mat 
     {
         int cnt = (i < trackCnt.size()) ? trackCnt[i] : 1;
 
-        double hue = std::max(0.0, 120.0 - cnt * 5.0); 
+        double hue = std::max(0.0, 120.0 - cnt * 5.0);
 
         cv::Mat hsv(1, 1, CV_8UC3, cv::Scalar(static_cast<uchar>(hue), 255, 255));
         cv::Mat bgr;
@@ -313,9 +335,9 @@ void FeatureDetector::DrawFeaturesOnImage(const cv::Mat &imgLeft, const cv::Mat 
 
     for (const auto &kp : rightKeys)
     {
-        if (kp.pt.x >= 0 && kp.pt.y >= 0) 
+        if (kp.pt.x >= 0 && kp.pt.y >= 0)
         {
-            cv::circle(colorRight, kp.pt, 3, cv::Scalar(0, 255, 0), -1); 
+            cv::circle(colorRight, kp.pt, 3, cv::Scalar(0, 255, 0), -1);
         }
     }
 

@@ -76,7 +76,6 @@ private:
     bool inBorder(const cv::Point2f &pt, int cols, int rows);
 
     cv::Mat mask; ///< 特征点提取时的遮罩掩码矩阵
-    cv::Ptr<cv::CLAHE> clahe;
     int maxFeatures;          ///< 图像中维持的最大特征点数量
     int minFeatureDist;       ///< 特征点之间的最小像素距离
     static int nextFeatureId; ///< 用于给新提取特征点分配的全局递增 ID

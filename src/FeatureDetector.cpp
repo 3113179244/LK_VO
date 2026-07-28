@@ -14,6 +14,7 @@ FeatureDetector::FeatureDetector()
 {
     maxFeatures = Config::get<int>("max_cnt");     // 帧内最大特征点数
     minFeatureDist = Config::get<int>("min_dist"); // 特征点间最小距离（像素）
+    clahe = cv::createCLAHE(3.0, cv::Size(8, 8));
 }
 
 /**
@@ -21,26 +22,36 @@ FeatureDetector::FeatureDetector()
  */
 void FeatureDetector::TrackImage(std::shared_ptr<Frame> prevFrame,
                                  std::shared_ptr<Frame> currFrame,
+                                 const cv::Mat &prevImgLeft,
                                  const cv::Mat &currImgLeft,
                                  const cv::Mat &currImgRight)
 {
     if (!currFrame)
         return;
+    cv::Mat prevImgLeftClahe, currImgLeftClahe, currImgRightClahe;
+    if (!prevImgLeft.empty())
+        clahe->apply(prevImgLeft, prevImgLeftClahe);
+    if (!currImgLeft.empty())
+        clahe->apply(currImgLeft, currImgLeftClahe);
+    if (!currImgRight.empty())
+        clahe->apply(currImgRight, currImgRightClahe);
+    // 若有上一帧，可在此执行前后帧光流跟踪 (需要传入上一帧左图 prevImg)
+    if (prevFrame && !prevImgLeftClahe.empty())
+    {
+        TrackPrevLeftToCurrLeft(prevFrame, currFrame, prevImgLeftClahe, currImgLeftClahe);
+    }
 
-    // 1. 若有上一帧，可在此执行前后帧光流跟踪 (需要传入上一帧左图 prevImg)
-    // TrackPrevLeftToCurrLeft(prevFrame, currFrame, prevImg, currImgLeft);
-
-    // 2. 将当前已有特征点按追踪次数（稳定度）降序排序
+    // 将当前已有特征点按追踪次数（稳定度）降序排序
     SortPointsByTrackCount(currFrame);
 
-    // 3. 在已有特征点四周生成 Mask（避免点过于密集），然后补充提取新角点
-    SetMask(currFrame, currImgLeft.cols, currImgLeft.rows);
-    DetectNewFeatures(currFrame, currImgLeft);
+    // 在已有特征点四周生成 Mask（避免点过于密集），然后补充提取新角点
+    SetMask(currFrame, currImgLeftClahe.cols, currImgLeftClahe.rows);
+    DetectNewFeatures(currFrame, currImgLeftClahe);
 
-    // 4. 若传入了右目图像，则进行双目光流匹配，并利用 RANSAC 基础矩阵剔除错配
+    // 若传入了右目图像，则进行双目光流匹配，并利用 RANSAC 基础矩阵剔除错配
     if (!currImgRight.empty())
     {
-        TrackStereo(currFrame, currImgLeft, currImgRight);
+        TrackStereo(currFrame, currImgLeftClahe, currImgRightClahe);
         FilterStereoMismatch(currFrame);
     }
 }
@@ -269,11 +280,11 @@ bool FeatureDetector::inBorder(const cv::Point2f &pt, int cols, int rows)
 void FeatureDetector::DrawFeaturesOnImage(const cv::Mat &imgLeft, const cv::Mat &imgRight,
                                           const std::vector<cv::KeyPoint> &leftKeys,
                                           const std::vector<cv::KeyPoint> &rightKeys,
+                                          const std::vector<int> &trackCnt,
                                           cv::Mat &outDisplay)
 {
     cv::Mat colorLeft, colorRight;
 
-    // 转为 3 通道 BGR 彩色图
     if (imgLeft.channels() == 1)
         cv::cvtColor(imgLeft, colorLeft, cv::COLOR_GRAY2BGR);
     else
@@ -284,21 +295,29 @@ void FeatureDetector::DrawFeaturesOnImage(const cv::Mat &imgLeft, const cv::Mat 
     else
         colorRight = imgRight.clone();
 
-    // 绘制左图特征点（绿点）
-    for (const auto &kp : leftKeys)
+    for (size_t i = 0; i < leftKeys.size(); ++i)
     {
-        cv::circle(colorLeft, kp.pt, 3, cv::Scalar(0, 255, 0), -1);
+        int cnt = (i < trackCnt.size()) ? trackCnt[i] : 1;
+
+        double hue = std::max(0.0, 120.0 - cnt * 5.0); 
+
+        cv::Mat hsv(1, 1, CV_8UC3, cv::Scalar(static_cast<uchar>(hue), 255, 255));
+        cv::Mat bgr;
+        cv::cvtColor(hsv, bgr, cv::COLOR_HSV2BGR);
+        cv::Scalar pointColor = cv::Scalar(bgr.at<cv::Vec3b>(0, 0)[0],
+                                           bgr.at<cv::Vec3b>(0, 0)[1],
+                                           bgr.at<cv::Vec3b>(0, 0)[2]);
+
+        cv::circle(colorLeft, leftKeys[i].pt, 3, pointColor, -1);
     }
 
-    // 绘制右图特征点（黄点）
     for (const auto &kp : rightKeys)
     {
-        if (kp.pt.x >= 0 && kp.pt.y >= 0) // 过滤掉无效的点 (-1, -1)
+        if (kp.pt.x >= 0 && kp.pt.y >= 0) 
         {
-            cv::circle(colorRight, kp.pt, 3, cv::Scalar(0, 255, 255), -1);
+            cv::circle(colorRight, kp.pt, 3, cv::Scalar(0, 255, 0), -1); 
         }
     }
 
-    // 上下拼接并输出
     cv::vconcat(colorLeft, colorRight, outDisplay);
 }

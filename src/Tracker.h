@@ -29,6 +29,7 @@ private:
     std::shared_ptr<Frame> mpPrevFrame;
     std::shared_ptr<Frame> mpCurrFrame;
     int mNextFrameId;
+    cv::Mat mPrevImage0;
 };
 
 #endif // TRACKER_H

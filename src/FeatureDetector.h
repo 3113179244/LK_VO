@@ -26,12 +26,14 @@ public:
      */
     void TrackImage(std::shared_ptr<Frame> prevFrame,
                     std::shared_ptr<Frame> currFrame,
+                    const cv::Mat &prevImgLeft,
                     const cv::Mat &currImgLeft,
                     const cv::Mat &currImgRight);
     void DrawFeaturesOnImage(const cv::Mat& imgLeft, const cv::Mat& imgRight, 
-                         const std::vector<cv::KeyPoint>& leftKeys, 
-                         const std::vector<cv::KeyPoint>& rightKeys, 
-                         cv::Mat& outDisplay);
+                             const std::vector<cv::KeyPoint>& leftKeys, 
+                             const std::vector<cv::KeyPoint>& rightKeys, 
+                             const std::vector<int>& trackCnt, 
+                             cv::Mat& outDisplay);
 private:
     /**
      * @brief 利用 LK 金字塔光流算法计算上一帧左图到当前帧左图的特征追踪
@@ -74,7 +76,7 @@ private:
     bool inBorder(const cv::Point2f &pt, int cols, int rows);
 
     cv::Mat mask; ///< 特征点提取时的遮罩掩码矩阵
-
+    cv::Ptr<cv::CLAHE> clahe;
     int maxFeatures;          ///< 图像中维持的最大特征点数量
     int minFeatureDist;       ///< 特征点之间的最小像素距离
     static int nextFeatureId; ///< 用于给新提取特征点分配的全局递增 ID

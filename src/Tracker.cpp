@@ -15,16 +15,17 @@ Eigen::Matrix4d Tracker::GrabImageStereo(const double timestamp, const cv::Mat &
     // 提取与追踪特征点
     if (mpFeatureDetector)
     {
-        mpFeatureDetector->TrackImage(mpPrevFrame, mpCurrFrame, image0, image1);
+        mpFeatureDetector->TrackImage(mpPrevFrame, mpCurrFrame, mPrevImage0, image0, image1);
         mpFeatureDetector->DrawFeaturesOnImage(
             image0,
             image1,
             mpCurrFrame->mvleftpixel,
             mpCurrFrame->mvrightpixel,
+            mpCurrFrame->mvTrackCnt,
             matDisplay);
     }
 
     mpPrevFrame = mpCurrFrame;
-
+    mPrevImage0 = image0.clone();
     return Eigen::Matrix4d::Identity();
 }

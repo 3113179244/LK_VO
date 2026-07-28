@@ -1,17 +1,23 @@
 #include "DepthFilter.h"
 #include "Camera.h"
-DepthFilter::DepthFilter(std::shared_ptr<Camera> pCamera)
-    : mpCamera(pCamera), mNextSeedId(0) {}
+#include <opencv2/imgproc.hpp>
+#include <algorithm>
 
-void DepthFilter::AddSeed(const Eigen::Vector2f &pt, float init_depth, float min_depth)
+DepthFilter::DepthFilter(std::shared_ptr<Camera> pCamera, float baseline, float max_disparity)
+    : mpCamera(pCamera), mBaseline(baseline), mMaxDisparity(max_disparity), mNextSeedId(0)
 {
-    std::unique_lock<std::mutex> lock(mMutexSeeds);
-    // 将求出的 Vector3d 显式转换为 Vector3f 供 Seed 结构体使用
-    Eigen::Vector3f f = mpCamera->Pixel2Camera(pt.cast<double>()).cast<float>();
-    mvSeeds.emplace_back(mNextSeedId++, pt, f, init_depth, min_depth);
+    // 假设相机内参 fx ≈ fy
+    mFocalLength = static_cast<float>(pCamera->fx);
 }
 
-void DepthFilter::Update(const cv::Mat &cur_img, const Eigen::Matrix4f &T_cur_ref)
+void DepthFilter::AddSeed(const Eigen::Vector2f &pt_left, float init_depth, float min_depth)
+{
+    std::unique_lock<std::mutex> lock(mMutexSeeds);
+    Eigen::Vector3f ray = mpCamera->Pixel2Camera(pt_left.cast<double>()).cast<float>();
+    mvSeeds.emplace_back(mNextSeedId++, pt_left, ray, init_depth, min_depth);
+}
+
+void DepthFilter::Update(const cv::Mat &left_img, const cv::Mat &right_img)
 {
     std::unique_lock<std::mutex> lock(mMutexSeeds);
 
@@ -20,17 +26,12 @@ void DepthFilter::Update(const cv::Mat &cur_img, const Eigen::Matrix4f &T_cur_re
         if (seed.is_converged)
             continue;
 
-        Eigen::Vector2d best_px = Eigen::Vector2d::Zero();
-        float tau_inv = 0.0f;
-        float sigma2_tau = 0.0f;
-
-        // 1. 沿极线搜索并提取观测到的逆深度 tau_inv 以及观测方差 sigma2_tau
-        if (EpipolarSearch(seed, cur_img, T_cur_ref, best_px, tau_inv, sigma2_tau))
+        float tau_obs = 0.0f, sigma2_obs = 0.0f;
+        if (ComputeObservation(seed, left_img, right_img, tau_obs, sigma2_obs))
         {
-            // 2. 贝叶斯滤波器更新
-            UpdateSeed(seed, tau_inv, sigma2_tau);
+            UpdateSeed(seed, tau_obs, sigma2_obs);
 
-            // 3. 收敛条件判定：方差小于给定阈值或者标准差占逆深度的比例极小
+            // 收敛判定（同单目）
             if (std::sqrt(seed.sigma2) < 0.005f * seed.mu || seed.a / (seed.a + seed.b) > 0.85f)
             {
                 seed.is_converged = true;
@@ -39,168 +40,127 @@ void DepthFilter::Update(const cv::Mat &cur_img, const Eigen::Matrix4f &T_cur_re
     }
 }
 
-// 注意：加上 DepthFilter:: 类作用域修饰符
-bool DepthFilter::EpipolarSearch(const Seed &seed, const cv::Mat &cur_img, const Eigen::Matrix4f &T_cur_ref,
-                                 Eigen::Vector2d &best_curr_px, float &depth_best, float &variance_best)
+bool DepthFilter::ComputeObservation(const Seed &seed,
+                                                 const cv::Mat &left_img,
+                                                 const cv::Mat &right_img,
+                                                 float &tau_obs,
+                                                 float &sigma2_obs)
 {
-    Eigen::Matrix3f R_cur_ref = T_cur_ref.block<3, 3>(0, 0);
-    Eigen::Vector3f t_cur_ref = T_cur_ref.block<3, 1>(0, 3);
+    // 左目特征点
+    cv::Point2f ptL(seed.px.x(), seed.px.y());
 
-    // 计算极线端点 (对应 3-sigma 深度区间)
-    float d_min = 1.0f / (seed.mu + 3.0f * std::sqrt(seed.sigma2));
-    float d_max = 1.0f / std::max(0.00001f, seed.mu - 3.0f * std::sqrt(seed.sigma2));
+    // 粗略估计当前深度对应的视差：d = f * baseline / depth
+    float depth_est = 1.0f / seed.mu;
+    float disp_est = mFocalLength * mBaseline / depth_est;
 
-    Eigen::Vector3f P_min = R_cur_ref * (seed.f * d_min) + t_cur_ref;
-    Eigen::Vector3f P_max = R_cur_ref * (seed.f * d_max) + t_cur_ref;
+    // 搜索范围：以 disp_est 为中心，±3σ 范围（σ 来自逆深度的方差转化）
+    float sigma_disp = mFocalLength * mBaseline * std::sqrt(seed.sigma2); // 近似
+    float disp_min = std::max(0.0f, disp_est - 3.0f * sigma_disp);
+    float disp_max = std::min(mMaxDisparity, disp_est + 3.0f * sigma_disp);
 
-    if (P_min.z() <= 0.0f || P_max.z() <= 0.0f)
+    if (disp_max - disp_min < 1.0f)
+        return false; // 搜索范围太小
+
+    // 准备左目参考块
+    int half = mPatchSize / 2;
+    cv::Rect roiL(ptL.x - half, ptL.y - half, mPatchSize, mPatchSize);
+    if (roiL.x < 0 || roiL.y < 0 || roiL.x + mPatchSize > left_img.cols || roiL.y + mPatchSize > left_img.rows)
         return false;
 
-    // Camera2Pixel 接受 Vector3d 返回 Vector2d
-    Eigen::Vector2d px_min = mpCamera->Camera2Pixel(P_min.cast<double>());
-    Eigen::Vector2d px_max = mpCamera->Camera2Pixel(P_max.cast<double>());
+    cv::Mat patchL = left_img(roiL).clone();
 
-    Eigen::Vector2d epipolar_dir = px_max - px_min;
-    double epipolar_length = epipolar_dir.norm();
-    if (epipolar_length < 1.0)
-        return false; // 视差太小，不具备测量能力
-
-    epipolar_dir /= epipolar_length;
-
-    // 沿极线步长搜索 NCC 最佳匹配点
     float best_ncc = -1.0f;
-    Eigen::Vector2d best_pt = px_min;
+    int best_disp = -1;
 
-    for (double l = 0.0; l <= epipolar_length; l += 0.7)
+    // 沿水平极线搜索（只在右目）
+    for (int d = static_cast<int>(disp_min); d <= static_cast<int>(disp_max); ++d)
     {
-        Eigen::Vector2d pt = px_min + l * epipolar_dir;
-        if (pt.x() < 5 || pt.x() >= cur_img.cols - 5 || pt.y() < 5 || pt.y() >= cur_img.rows - 5)
+        cv::Point2f ptR(ptL.x - d, ptL.y); // 注意：双目校正后，右目对应点 x = x_left - d
+        cv::Rect roiR(ptR.x - half, ptR.y - half, mPatchSize, mPatchSize);
+        if (roiR.x < 0 || roiR.y < 0 || roiR.x + mPatchSize > right_img.cols || roiR.y + mPatchSize > right_img.rows)
             continue;
 
-        float ncc = ComputeNCC(mRefImg, cur_img, seed.px, pt.cast<float>());
+        cv::Mat patchR = right_img(roiR).clone();
+        float ncc = ComputeNCC(patchL, patchR);
         if (ncc > best_ncc)
         {
             best_ncc = ncc;
-            best_pt = pt;
+            best_disp = d;
         }
     }
 
-    if (best_ncc < 0.8f) // 匹配质量不达标
-        return false;
+    if (best_ncc < 0.6f || best_disp < 0)
+        return false; // 匹配质量不佳
 
-    best_curr_px = best_pt;
+    // 由视差计算深度
+    float depth_obs = mFocalLength * mBaseline / static_cast<float>(best_disp);
+    tau_obs = 1.0f / depth_obs;
 
-    // 根据几何匹配算出的三角化深度，计算对应的逆深度 tau_inv
-    float match_dist = static_cast<float>((best_curr_px - px_min).norm());
-    float ratio = match_dist / static_cast<float>(epipolar_length);
-    float z_meas = 1.0f / ((1.0f - ratio) * (1.0f / d_min) + ratio * (1.0f / d_max));
-
-    depth_best = 1.0f / z_meas; // 即 tau_inv
-
-    // 根据一个像素的几何不确定性反算逆深度的测量方差 sigma2_tau
-    float z_meas_px_plus = 1.0f / ((1.0f - std::min(1.0f, ratio + 1.0f / static_cast<float>(epipolar_length))) * (1.0f / d_min) +
-                                   std::min(1.0f, ratio + 1.0f / static_cast<float>(epipolar_length)) * (1.0f / d_max));
-    float tau_meas_px_plus = 1.0f / z_meas_px_plus;
-    variance_best = (tau_meas_px_plus - depth_best) * (tau_meas_px_plus - depth_best);
+    // 观测方差：假设视差匹配误差为 ±0.5 像素（可调）
+    float disp_err = 0.5f;
+    float depth_err = mFocalLength * mBaseline * disp_err / (best_disp * best_disp); // 对 d 求导
+    sigma2_obs = (1.0f / (depth_obs - depth_err) - tau_obs) * (1.0f / (depth_obs - depth_err) - tau_obs);
 
     return true;
 }
 
-void DepthFilter::UpdateSeed(Seed &seed, float x, float tau_sq)
+void DepthFilter::UpdateSeed(Seed &seed, float tau_obs, float sigma2_obs)
 {
-    // Vogiatzis 提出的 Gaussian-Uniform 混合模型贝叶斯更新规则
-    float norm_pdf = (1.0f / std::sqrt(2.0f * M_PI * (seed.sigma2 + tau_sq))) *
-                     std::exp(-0.5f * (x - seed.mu) * (x - seed.mu) / (seed.sigma2 + tau_sq));
+    // 与单目 DepthFilter::UpdateSeed 完全一致
+    float norm_pdf = (1.0f / std::sqrt(2.0f * M_PI * (seed.sigma2 + sigma2_obs))) *
+                     std::exp(-0.5f * (tau_obs - seed.mu) * (tau_obs - seed.mu) / (seed.sigma2 + sigma2_obs));
 
     float C1 = (seed.a / (seed.a + seed.b)) * norm_pdf;
     float C2 = (seed.b / (seed.a + seed.b)) * (1.0f / seed.z_range);
     float C = C1 + C2;
-
     float C1_div_C = C1 / C;
 
-    // 更新一阶矩与二阶矩
-    float mu_post = C1_div_C * ((seed.sigma2 * x + tau_sq * seed.mu) / (seed.sigma2 + tau_sq)) + (1.0f - C1_div_C) * seed.mu;
+    float mu_post = C1_div_C * ((seed.sigma2 * tau_obs + sigma2_obs * seed.mu) / (seed.sigma2 + sigma2_obs)) +
+                    (1.0f - C1_div_C) * seed.mu;
 
-    float sigma2_post = C1_div_C * ((seed.sigma2 * tau_sq) / (seed.sigma2 + tau_sq) +
-                                   ((seed.sigma2 * x + tau_sq * seed.mu) / (seed.sigma2 + tau_sq)) *
-                                       ((seed.sigma2 * x + tau_sq * seed.mu) / (seed.sigma2 + tau_sq))) +
+    float sigma2_post = C1_div_C * ((seed.sigma2 * sigma2_obs) / (seed.sigma2 + sigma2_obs) +
+                                    ((seed.sigma2 * tau_obs + sigma2_obs * seed.mu) / (seed.sigma2 + sigma2_obs)) *
+                                        ((seed.sigma2 * tau_obs + sigma2_obs * seed.mu) / (seed.sigma2 + sigma2_obs))) +
                         (1.0f - C1_div_C) * (seed.sigma2 + seed.mu * seed.mu) - mu_post * mu_post;
 
-    // 更新 Beta 分布参数
     seed.a = seed.a + C1_div_C;
     seed.b = seed.b + (1.0f - C1_div_C);
-
     seed.mu = mu_post;
     seed.sigma2 = std::max(0.000001f, sigma2_post);
 }
 
-float DepthFilter::ComputeNCC(const cv::Mat &ref_img, const cv::Mat &cur_img, const Eigen::Vector2f &pt_ref, const Eigen::Vector2f &pt_cur)
+float DepthFilter::ComputeNCC(const cv::Mat &patch_ref, const cv::Mat &patch_cur)
 {
-    if (ref_img.empty() || cur_img.empty())
+    cv::Mat ref_f, cur_f;
+    patch_ref.convertTo(ref_f, CV_32F);
+    patch_cur.convertTo(cur_f, CV_32F);
+
+    cv::Scalar mean_ref = cv::mean(ref_f);
+    cv::Scalar mean_cur = cv::mean(cur_f);
+    ref_f -= mean_ref[0];
+    cur_f -= mean_cur[0];
+
+    float numerator = static_cast<float>(ref_f.dot(cur_f));
+    float denom = static_cast<float>(std::sqrt(ref_f.dot(ref_f) * cur_f.dot(cur_f)));
+
+    if (denom < 1e-6f)
         return 0.0f;
-
-    int half_patch = 3;
-    float mean_ref = 0.0f, mean_cur = 0.0f;
-
-    std::vector<float> vec_ref, vec_cur;
-    vec_ref.reserve(49);
-    vec_cur.reserve(49);
-
-    for (int dy = -half_patch; dy <= half_patch; ++dy)
-    {
-        for (int dx = -half_patch; dx <= half_patch; ++dx)
-        {
-            float val_r = ref_img.at<uchar>(pt_ref.y() + dy, pt_ref.x() + dx);
-            float val_c = cur_img.at<uchar>(pt_cur.y() + dy, pt_cur.x() + dx);
-
-            vec_ref.push_back(val_r);
-            vec_cur.push_back(val_c);
-
-            mean_ref += val_r;
-            mean_cur += val_c;
-        }
-    }
-
-    mean_ref /= 49.0f;
-    mean_cur /= 49.0f;
-
-    float numerator = 0.0f;
-    float denom_r = 0.0f, denom_c = 0.0f;
-
-    for (size_t i = 0; i < vec_ref.size(); ++i)
-    {
-        float r = vec_ref[i] - mean_ref;
-        float c = vec_cur[i] - mean_cur;
-
-        numerator += r * c;
-        denom_r += r * r;
-        denom_c += c * c;
-    }
-
-    if (denom_r * denom_c < 1e-6f)
-        return 0.0f;
-
-    return numerator / std::sqrt(denom_r * denom_c);
+    return numerator / denom;
 }
 
 std::vector<Seed> DepthFilter::GetConvergedSeeds()
 {
     std::unique_lock<std::mutex> lock(mMutexSeeds);
-    std::vector<Seed> converged_seeds;
-    std::vector<Seed> active_seeds;
+    std::vector<Seed> converged;
+    std::vector<Seed> active;
 
-    for (const auto &seed : mvSeeds)
+    for (auto &s : mvSeeds)
     {
-        if (seed.is_converged)
-        {
-            converged_seeds.push_back(seed);
-        }
+        if (s.is_converged)
+            converged.push_back(s);
         else
-        {
-            active_seeds.push_back(seed);
-        }
+            active.push_back(s);
     }
-
-    mvSeeds = std::move(active_seeds);
-    return converged_seeds;
+    mvSeeds = std::move(active);
+    return converged;
 }

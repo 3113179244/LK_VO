@@ -73,53 +73,72 @@ void FeatureDetector::TrackPrevLeftToCurrLeft(std::shared_ptr<Frame> prevFrame,
     // 利用 OpenCV 的金字塔 LK 光流算法追踪上一帧特征点到当前帧
     cv::calcOpticalFlowPyrLK(prevImg, currImg, prevPts, currPts, status, err, cv::Size(21, 21), 3);
 
-    // 清空当前帧原本的特征数据，准备写入追踪成功的点
-    currFrame->mvleftpixel.clear();
-    currFrame->mvFeatureIds.clear();
-    currFrame->mvTrackCnt.clear();
-
-    // 临时容器，用于存放过滤后的点 
-    std::vector<cv::KeyPoint> filteredPts;
-    std::vector<int> filteredIds;
-    std::vector<int> filteredCnt;
-    // 预分配内存提高性能
-    filteredPts.reserve(status.size());
-    filteredIds.reserve(status.size());
-    filteredCnt.reserve(status.size());
-    // 遍历光流结果，筛选成功追踪且在图像有效边界内的特征点
+    // 第一步：初步筛选（status 成功且在边界内）
+    std::vector<cv::Point2f> validPrevPts, validCurrPts;
+    std::vector<int> validIndices; // 对应原始 prevPts 的下标
     for (size_t i = 0; i < status.size(); ++i)
     {
         if (status[i] && inBorder(currPts[i], currImg.cols, currImg.rows))
         {
-            cv::Point2f pt = currPts[i];
-
-            bool tooClose = false;
-            // 遍历已经筛选通过（即将保留）的点，看距离是否太近
-            for (const auto &exist_kp : filteredPts)
-            {
-                if (cv::norm(pt - exist_kp.pt) < minFeatureDist)
-                {
-                    tooClose = true;
-                    break;
-                }
-            }
-            if (tooClose)
-            {
-                continue; // 距离太近，直接丢弃这个追踪点
-            }
-
-            // 通过检查，存入临时容器
-            filteredPts.push_back(cv::KeyPoint(pt, 1.0f));
-            filteredIds.push_back(prevFrame->mvFeatureIds[i]);
-            filteredCnt.push_back(prevFrame->mvTrackCnt[i] + 1);
+            validPrevPts.push_back(prevPts[i]);
+            validCurrPts.push_back(currPts[i]);
+            validIndices.push_back(static_cast<int>(i));
         }
     }
 
+    // 如果初步筛选后没有点，直接返回
+    if (validIndices.empty())
+    {
+        currFrame->mvleftpixel.clear();
+        currFrame->mvFeatureIds.clear();
+        currFrame->mvTrackCnt.clear();
+        currFrame->iFeaturePointnums = 0;
+        return;
+    }
+
+    // 第二步：帧间 RANSAC 剔除误匹配
+    std::vector<int> inlierIdxInValid = FilterInterFrameMismatch(validPrevPts, validCurrPts);
+    // 将内点索引映射回原始索引
+    std::vector<int> finalIndices;
+    finalIndices.reserve(inlierIdxInValid.size());
+    for (int idx : inlierIdxInValid)
+    {
+        finalIndices.push_back(validIndices[idx]);
+    }
+
+    // 第三步：对剩余的内点进行去重（防止空间扎堆）
+    std::vector<cv::KeyPoint> filteredPts;
+    std::vector<int> filteredIds;
+    std::vector<int> filteredCnt;
+    filteredPts.reserve(finalIndices.size());
+    filteredIds.reserve(finalIndices.size());
+    filteredCnt.reserve(finalIndices.size());
+
+    for (int idx : finalIndices)
+    {
+        cv::Point2f pt = currPts[idx];
+
+        bool tooClose = false;
+        for (const auto &exist_kp : filteredPts)
+        {
+            if (cv::norm(pt - exist_kp.pt) < minFeatureDist)
+            {
+                tooClose = true;
+                break;
+            }
+        }
+        if (tooClose)
+            continue;
+
+        filteredPts.push_back(cv::KeyPoint(pt, 1.0f));
+        filteredIds.push_back(prevFrame->mvFeatureIds[idx]);
+        filteredCnt.push_back(prevFrame->mvTrackCnt[idx] + 1);
+    }
+
+    // 将过滤后的数据移交给当前帧
     currFrame->mvleftpixel = std::move(filteredPts);
     currFrame->mvFeatureIds = std::move(filteredIds);
     currFrame->mvTrackCnt = std::move(filteredCnt);
-
-    // 更新当前帧记录的特征点总数
     currFrame->iFeaturePointnums = static_cast<int>(currFrame->mvleftpixel.size());
 }
 
@@ -320,17 +339,28 @@ void FeatureDetector::DrawFeaturesOnImage(const cv::Mat &imgLeft, const cv::Mat 
     for (size_t i = 0; i < leftKeys.size(); ++i)
     {
         int cnt = (i < trackCnt.size()) ? trackCnt[i] : 1;
-
         double hue = std::max(0.0, 120.0 - cnt * 5.0);
-
         cv::Mat hsv(1, 1, CV_8UC3, cv::Scalar(static_cast<uchar>(hue), 255, 255));
         cv::Mat bgr;
         cv::cvtColor(hsv, bgr, cv::COLOR_HSV2BGR);
         cv::Scalar pointColor = cv::Scalar(bgr.at<cv::Vec3b>(0, 0)[0],
                                            bgr.at<cv::Vec3b>(0, 0)[1],
                                            bgr.at<cv::Vec3b>(0, 0)[2]);
-
         cv::circle(colorLeft, leftKeys[i].pt, 3, pointColor, -1);
+
+        // int cnt = (i < trackCnt.size()) ? trackCnt[i] : 1;
+        // cv::Scalar pointColor;
+        // if (cnt <= 1)
+        // {
+        //     // 新提取的特征点 -> 蓝色 (BGR = 255, 0, 0)
+        //     pointColor = cv::Scalar(255, 0, 0);
+        // }
+        // else
+        // {
+        //     // 多次可观测的稳定特征点 -> 红色 (BGR = 0, 0, 255)
+        //     pointColor = cv::Scalar(0, 0, 255);
+        // }
+        // cv::circle(colorLeft, leftKeys[i].pt, 3, pointColor, -1);
     }
 
     for (const auto &kp : rightKeys)
@@ -342,4 +372,37 @@ void FeatureDetector::DrawFeaturesOnImage(const cv::Mat &imgLeft, const cv::Mat 
     }
 
     cv::vconcat(colorLeft, colorRight, outDisplay);
+}
+
+std::vector<int> FeatureDetector::FilterInterFrameMismatch(const std::vector<cv::Point2f> &prevPts,
+                                                           const std::vector<cv::Point2f> &currPts)
+{
+    std::vector<int> inlierIndices;
+    if (prevPts.size() < 8 || currPts.size() < 8)
+    {
+        // 点数太少，无法可靠估计基础矩阵，全部保留
+        inlierIndices.resize(prevPts.size());
+        std::iota(inlierIndices.begin(), inlierIndices.end(), 0);
+        return inlierIndices;
+    }
+
+    std::vector<uchar> status;
+    // 使用 RANSAC 求基础矩阵，重投影误差阈值 1.0 像素 (可调)
+    cv::findFundamentalMat(prevPts, currPts, cv::FM_RANSAC, 1.0, 0.99, status);
+
+    for (size_t i = 0; i < status.size(); ++i)
+    {
+        if (status[i])
+            inlierIndices.push_back(static_cast<int>(i));
+    }
+
+    // 如果内点太少（比如 < 6），可能估计失败，退回全部保留（根据工程需求也可丢弃所有）
+    if (inlierIndices.size() < 6)
+    {
+        inlierIndices.clear();
+        inlierIndices.resize(prevPts.size());
+        std::iota(inlierIndices.begin(), inlierIndices.end(), 0);
+    }
+
+    return inlierIndices;
 }

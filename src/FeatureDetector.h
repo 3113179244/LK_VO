@@ -4,7 +4,7 @@
 #include <opencv2/opencv.hpp>
 #include <vector>
 #include <memory>
-
+#include <numeric> 
 // 前向声明，避免头文件循环引用
 class Frame;
 
@@ -29,11 +29,12 @@ public:
                     const cv::Mat &prevImgLeft,
                     const cv::Mat &currImgLeft,
                     const cv::Mat &currImgRight);
-    void DrawFeaturesOnImage(const cv::Mat& imgLeft, const cv::Mat& imgRight, 
-                             const std::vector<cv::KeyPoint>& leftKeys, 
-                             const std::vector<cv::KeyPoint>& rightKeys, 
-                             const std::vector<int>& trackCnt, 
-                             cv::Mat& outDisplay);
+    void DrawFeaturesOnImage(const cv::Mat &imgLeft, const cv::Mat &imgRight,
+                             const std::vector<cv::KeyPoint> &leftKeys,
+                             const std::vector<cv::KeyPoint> &rightKeys,
+                             const std::vector<int> &trackCnt,
+                             cv::Mat &outDisplay);
+
 private:
     /**
      * @brief 利用 LK 金字塔光流算法计算上一帧左图到当前帧左图的特征追踪
@@ -75,10 +76,19 @@ private:
      */
     bool inBorder(const cv::Point2f &pt, int cols, int rows);
 
-    cv::Mat mask; ///< 特征点提取时的遮罩掩码矩阵
-    int maxFeatures;          ///< 图像中维持的最大特征点数量
-    int minFeatureDist;       ///< 特征点之间的最小像素距离
-    static int nextFeatureId; ///< 用于给新提取特征点分配的全局递增 ID
+    /**
+     * @brief 利用基础矩阵 RANSAC 剔除前后帧之间的光流误匹配
+     * @param prevPts 上一帧的像素点 (已通过 status 和边界检查)
+     * @param currPts 当前帧对应的像素点
+     * @return 内点索引 (对应输入 vector 的下标)
+     */
+    std::vector<int> FilterInterFrameMismatch(const std::vector<cv::Point2f> &prevPts,
+                                              const std::vector<cv::Point2f> &currPts);
+
+    cv::Mat mask;             //特征点提取时的遮罩掩码矩阵
+    int maxFeatures;          //图像中维持的最大特征点数量
+    int minFeatureDist;       //特征点之间的最小像素距离
+    static int nextFeatureId; //用于给新提取特征点分配的全局递增 ID
 };
 
 #endif // FEATURE_DETECTOR_H

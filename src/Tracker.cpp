@@ -30,6 +30,7 @@ Eigen::Matrix4d Tracker::GrabImageStereo(const double timestamp, const cv::Mat &
             mpCurrFrame->mvrightpixel,
             mpCurrFrame->mvTrackCnt,
             matDisplay);
+        std::cout << "Frame " << mpCurrFrame->mFrameId << " features: " << mpCurrFrame->mvleftpixel.size() << std::endl;
     }
 
     mpPrevFrame = mpCurrFrame;

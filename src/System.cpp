@@ -14,8 +14,9 @@ System::System(const std::string &strConfigFile, const eSensor sensor, const boo
 
     // 初始化 Tracking 核心追踪器
     mpCamera = std::make_shared<Camera>();
-    mpTracker = std::make_shared<Tracker>(mpCamera, mpMap);
     mpMap = std::make_shared<Map>();
+    mpTracker = std::make_shared<Tracker>(mpCamera, mpMap);
+
     // 初始化 Viewer 并启动子线程
     if (mbUseViewer)
     {
@@ -46,6 +47,11 @@ Eigen::Matrix4d System::TrackStereo(const double &timestamp, const cv::Mat &imag
         std::cerr << "系统已关闭，拒绝处理新图像。" << std::endl;
     }
     Eigen::Matrix4d Tcw = mpTracker->GrabImageStereo(timestamp, image0, image1, matDisplay);
+    
+    if (mbUseViewer && mpViewer)
+    {
+        mpViewer->SetCurrentCameraPose(Tcw);
+    }
 
     return Tcw;
 }

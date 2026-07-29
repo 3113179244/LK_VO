@@ -5,8 +5,9 @@
 #include <Eigen/Core>
 #include <memory>
 #include <mutex>
-#include "FeatureDetector.h" 
+#include "FeatureDetector.h"
 #include "Frame.h"
+#include "MapPoint.h"
 // 前向声明
 class Camera;
 class Map;
@@ -30,6 +31,8 @@ private:
     std::shared_ptr<Frame> mpCurrFrame;
     int mNextFrameId;
     cv::Mat mPrevImage0;
+    bool mbInitialized;            // 是否已完成初始化
+    unsigned long mNextMapPointId; // 地图点全局ID计数器
 };
 
 #endif // TRACKER_H

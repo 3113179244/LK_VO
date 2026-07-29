@@ -46,9 +46,6 @@ void Viewer::Run()
                                 .SetBounds(0.0, 1.0, pangolin::Attach::Pix(175), 1.0, -1024.0f / 768.0f)
                                 .SetHandler(new pangolin::Handler3D(s_cam));
 
-    // 5. 创建OpenCV窗口用于2D显示
-    cv::namedWindow("LK_VO: Current Frame", cv::WINDOW_NORMAL);
-
     bool bFollow = true; // 内部跟踪跟随状态
 
     while (1)
@@ -111,16 +108,6 @@ void Viewer::Run()
         // 提交3D渲染
         pangolin::FinishFrame();
 
-        // 显示2D当前帧图像
-        {
-            std::unique_lock<std::mutex> lock(mMutexImg);
-            if (!mCurrentFrameImg.empty())
-            {
-                cv::imshow("LK_VO: Current Frame", mCurrentFrameImg);
-                cv::waitKey(1); // 非阻塞刷新
-            }
-        }
-
         // 处理重置请求（菜单点击Reset）
         if (menuReset)
         {
@@ -164,7 +151,6 @@ void Viewer::Run()
     }
 
     SetFinish();
-    cv::destroyWindow("LK_VO: Current Frame");
 }
 
 void Viewer::DrawMapPoints()

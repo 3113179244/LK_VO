@@ -1,6 +1,6 @@
 #include "Tracker.h"
-#include "Camera.h"     
-#include "Map.h"        
+#include "Camera.h"
+#include "Map.h"
 #include "MapPoint.h"
 #include <iostream>
 
@@ -28,6 +28,8 @@ Eigen::Matrix4d Tracker::GrabImageStereo(const double timestamp, const cv::Mat &
             mpCurrFrame->mvrightpixel,
             mpCurrFrame->mvTrackCnt,
             matDisplay);
+        mpPrevFrame = mpCurrFrame;
+        mPrevImage0 = image0.clone();
         std::cout << "Frame " << mpCurrFrame->mFrameId << " features: " << mpCurrFrame->mvleftpixel.size() << std::endl;
     }
     if (!mbInitialized && mpCurrFrame->mvleftpixel.size() > 0)
@@ -75,14 +77,11 @@ Eigen::Matrix4d Tracker::GrabImageStereo(const double timestamp, const cv::Mat &
             mpMap->InsertMapPoint(pMP);          // 加入地图
             mpCurrFrame->mvpMapPoints[i] = pMP;  // 关联至当前帧
         }
-
+        mbInitialized = true;
         // 将当前帧作为关键帧插入地图（供可视化用）
         mpMap->InsertKeyFrame(mpCurrFrame);
-        mbInitialized = true;
         std::cout << "[Tracker] Initial map generated with "
                   << mpCurrFrame->mvpMapPoints.size() << " points." << std::endl;
     }
-    mpPrevFrame = mpCurrFrame;
-    mPrevImage0 = image0.clone();
     return Eigen::Matrix4d::Identity();
 }

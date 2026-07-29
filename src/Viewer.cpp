@@ -58,7 +58,7 @@ void Viewer::DrawMapPoints()
 {
     // 从 Map 中安全获取数据
     std::vector<std::shared_ptr<MapPoint>> vpMPs = mpMap->GetAllMapPoints();
-    std::vector<std::shared_ptr<MapPoint>> vpActiveMPs = mpMap->GetActiveMapPoints();
+    std::vector<std::shared_ptr<MapPoint>> vpActiveMPs = mpMap->GetAllMapPoints();
 
     if (vpMPs.empty()) return;
 
@@ -70,7 +70,7 @@ void Viewer::DrawMapPoints()
     {
         if (vpMPs[i]->isBad())
             continue;
-        cv::Mat pos = vpMPs[i]->GetWorldPos();
+        cv::Mat pos = vpMPs[i]->GetMapPoints();
         glVertex3f(pos.at<float>(0), pos.at<float>(1), pos.at<float>(2));
     }
     glEnd();
@@ -83,7 +83,7 @@ void Viewer::DrawMapPoints()
     {
         if (vpActiveMPs[i]->isBad())
             continue;
-        cv::Mat pos = vpActiveMPs[i]->GetWorldPos();
+        cv::Mat pos = vpActiveMPs[i]->GetMapPoints();
         glVertex3f(pos.at<float>(0), pos.at<float>(1), pos.at<float>(2));
     }
     glEnd();

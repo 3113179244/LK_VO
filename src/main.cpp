@@ -66,7 +66,7 @@ int main(int argc, char **argv)
     std::cout << "  - ESC 键         : 退出程序" << std::endl;
     int nFrameId = 0;
     bool bIsPaused = false;
-
+    cv::Ptr<cv::CLAHE> mpClahe = cv::createCLAHE(3.0, cv::Size(8, 8));
     // 循环处理每一帧
     while (true)
     {
@@ -94,11 +94,15 @@ int main(int argc, char **argv)
                 std::cerr << "错误: 无法读取图像: " << strFilename << std::endl;
                 break;
             }
-
+            cv::Mat image0Clahe, image1Clahe;
+            if (!image0.empty())
+                mpClahe->apply(image0, image0Clahe);
+            if (!image1.empty())
+                mpClahe->apply(image1, image1Clahe);
             double dTimestamp = vdTimestamps[nFrameId];
             cv::Mat matDisplay;
             // 将图像和时间戳传给 VO 系统进行双目跟踪和位姿估计
-            Eigen::Matrix4d mTcw = SLAM.TrackStereo(vdTimestamps[nFrameId], image0, image1, matDisplay);
+            Eigen::Matrix4d mTcw = SLAM.TrackStereo(vdTimestamps[nFrameId], image0Clahe, image1Clahe, matDisplay);
             cv::imshow("Top (Left) / Bottom (Right)", matDisplay);
             nFrameId++;
         }

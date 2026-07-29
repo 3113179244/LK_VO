@@ -58,9 +58,8 @@ Eigen::Matrix4d Tracker::GrabImageStereo(const double timestamp, const cv::Mat &
                 continue;
 
             float depth = static_cast<float>(fx * baseline / disp);
-            if (depth < 0.1f || depth > 50.0f) // 深度范围过滤
-                continue;
-
+            bool isFar = (depth > 40.0 * baseline);
+            MapPoint::PointType type = isFar ? MapPoint::FAR : MapPoint::NEAR;
             // 归一化坐标 -> 世界坐标（初始位姿为单位矩阵）
             float u = (ptLeft.x - static_cast<float>(cx)) / static_cast<float>(fx);
             float v = (ptLeft.y - static_cast<float>(cy)) / static_cast<float>(fy);
@@ -72,7 +71,7 @@ Eigen::Matrix4d Tracker::GrabImageStereo(const double timestamp, const cv::Mat &
             pos.at<float>(1) = static_cast<float>(P_world.y());
             pos.at<float>(2) = static_cast<float>(P_world.z());
 
-            auto pMP = std::make_shared<MapPoint>(mNextMapPointId++, pos);
+            auto pMP = std::make_shared<MapPoint>(mNextMapPointId++, pos, type);
             pMP->AddObservation(mpCurrFrame, i); // 添加观测
             mpMap->InsertMapPoint(pMP);          // 加入地图
             mpCurrFrame->mvpMapPoints[i] = pMP;  // 关联至当前帧

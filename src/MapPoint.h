@@ -11,22 +11,27 @@ class Frame;
 
 /**
  * @brief 地图点类，表示SLAM系统中的3D地图点
- * 
+ *
  * 存储三维世界坐标，并维护所有观测到该点的关键帧及对应特征索引，
  * 同时提供线程安全的访问接口。
  */
 class MapPoint
 {
 public:
-    typedef std::shared_ptr<MapPoint> Ptr;  // 智能指针类型别名
-
+    typedef std::shared_ptr<MapPoint> Ptr; // 智能指针类型别名
+    enum PointType
+    {
+        NEAR = 0,
+        FAR = 1
+    };
     /**
      * @brief 构造函数
      * @param id     地图点唯一ID
      * @param points 三维坐标（通常为3x1的CV_32F矩阵）
      */
-    MapPoint(const long unsigned int id, const cv::Mat &points);
-
+    MapPoint(const long unsigned int id, const cv::Mat &points, PointType type = NEAR);
+    PointType GetType();
+    void SetType(PointType type);
     /**
      * @brief 设置三维坐标（线程安全）
      * @param points 新的坐标矩阵
@@ -76,16 +81,16 @@ public:
      */
     bool isBad();
 
-    const long unsigned int mId;  ///< 地图点ID，只读（初始化后不可变）
+    const long unsigned int mId; ///< 地图点ID，只读（初始化后不可变）
 
 private:
-    cv::Mat mMapPoints;          ///< 三维坐标（世界坐标系）
+    cv::Mat mMapPoints;                                     ///< 三维坐标（世界坐标系）
     std::map<std::shared_ptr<Frame>, size_t> mObservations; ///< 观测信息
-    int mnObs;                   ///< 观测数量（冗余变量，与mObservations.size()一致）
-    bool mbBad;                  ///< 坏点标志
-
-    std::mutex mMutexMapPoints;  ///< 保护mMapPoints的互斥锁
-    std::mutex mMutexFeatures;   ///< 保护mObservations, mnObs, mbBad的互斥锁
+    int mnObs;                                              ///< 观测数量（冗余变量，与mObservations.size()一致）
+    bool mbBad;                                             ///< 坏点标志
+    PointType mType;   // 远/近标志
+    std::mutex mMutexMapPoints; ///< 保护mMapPoints的互斥锁
+    std::mutex mMutexFeatures;  ///< 保护mObservations, mnObs, mbBad的互斥锁
 };
 
 #endif // MAPPOINT_H

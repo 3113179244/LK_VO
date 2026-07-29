@@ -5,16 +5,16 @@
  * @brief 构造函数实现
  * @param id     地图点ID
  * @param points 初始三维坐标
- * 
+ *
  * 初始化坐标（克隆一份独立数据），观测计数为0，坏点标志为false。
  */
-MapPoint::MapPoint(const long unsigned int id, const cv::Mat &points)
-    : mId(id), mMapPoints(points.clone()), mnObs(0), mbBad(false) {}
+MapPoint::MapPoint(const long unsigned int id, const cv::Mat &points, PointType type)
+    : mId(id), mMapPoints(points.clone()), mnObs(0), mbBad(false), mType(type) {}
 
 /**
  * @brief 线程安全地更新三维坐标
  * @param points 新坐标
- * 
+ *
  * 使用互斥锁保护，并复制数据到内部矩阵。
  */
 void MapPoint::SetMapPoints(const cv::Mat &points)
@@ -37,7 +37,7 @@ cv::Mat MapPoint::GetMapPoints()
  * @brief 添加观测关系
  * @param pFrame 观测关键帧
  * @param idx    特征索引
- * 
+ *
  * 若该帧已存在于观测列表中，则忽略；否则插入并增加计数。
  * 操作受互斥锁保护，确保线程安全。
  */
@@ -45,7 +45,7 @@ void MapPoint::AddObservation(std::shared_ptr<Frame> pFrame, size_t idx)
 {
     std::unique_lock<std::mutex> lock(mMutexFeatures);
     if (mObservations.count(pFrame))
-        return;                     // 已存在，不重复添加
+        return; // 已存在，不重复添加
     mObservations[pFrame] = idx;
     mnObs++;
 }
@@ -53,7 +53,7 @@ void MapPoint::AddObservation(std::shared_ptr<Frame> pFrame, size_t idx)
 /**
  * @brief 移除一个观测
  * @param pFrame 要移除的关键帧
- * 
+ *
  * 若该帧存在，则从映射中删除并减少计数。
  */
 void MapPoint::RemoveObservation(std::shared_ptr<Frame> pFrame)
@@ -73,7 +73,7 @@ void MapPoint::RemoveObservation(std::shared_ptr<Frame> pFrame)
 std::map<std::shared_ptr<Frame>, size_t> MapPoint::GetObservations()
 {
     std::unique_lock<std::mutex> lock(mMutexFeatures);
-    return mObservations;           // 返回拷贝，外部修改不影响内部
+    return mObservations; // 返回拷贝，外部修改不影响内部
 }
 
 /**
@@ -88,7 +88,7 @@ int MapPoint::GetObservedCount()
 
 /**
  * @brief 将地图点标记为坏点
- * 
+ *
  * 设置mbBad为true，后续可被地图清理线程删除。
  * 操作受互斥锁保护。
  */
@@ -106,4 +106,16 @@ bool MapPoint::isBad()
 {
     std::unique_lock<std::mutex> lock(mMutexFeatures);
     return mbBad;
+}
+
+MapPoint::PointType MapPoint::GetType() 
+{
+    std::unique_lock<std::mutex> lock(mMutexFeatures);
+    return mType;
+}
+
+void MapPoint::SetType(PointType type)
+{
+    std::unique_lock<std::mutex> lock(mMutexFeatures);
+    mType = type;
 }

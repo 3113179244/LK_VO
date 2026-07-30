@@ -53,11 +53,11 @@ Eigen::Matrix4d Tracker::GrabImageStereo(const double timestamp, const cv::Mat &
             if (kpRight.pt.x < 0) // 无效的双目匹配
                 continue;
 
-            float disp = ptLeft.x - kpRight.pt.x;
-            if (disp <= 0.0f)
+            float Parallax = ptLeft.x - kpRight.pt.x;
+            if (Parallax <= 0.0f)
                 continue;
 
-            float depth = static_cast<float>(fx * baseline / disp);
+            float depth = static_cast<float>(fx * baseline / Parallax);
             bool isFar = (depth > 40.0 * baseline);
             MapPoint::PointType type = isFar ? MapPoint::FAR : MapPoint::NEAR;
             // 归一化坐标 -> 世界坐标（初始位姿为单位矩阵）
@@ -66,15 +66,16 @@ Eigen::Matrix4d Tracker::GrabImageStereo(const double timestamp, const cv::Mat &
             Eigen::Vector3d P_world = depth * Eigen::Vector3d(u, v, 1.0);
 
             // 构建 MapPoint
-            cv::Mat pos(3, 1, CV_32F);
-            pos.at<float>(0) = static_cast<float>(P_world.x());
-            pos.at<float>(1) = static_cast<float>(P_world.y());
-            pos.at<float>(2) = static_cast<float>(P_world.z());
+            cv::Mat position(3, 1, CV_32F);
+            position.at<float>(0) = static_cast<float>(P_world.x());
+            position.at<float>(1) = static_cast<float>(P_world.y());
+            position.at<float>(2) = static_cast<float>(P_world.z());
 
-            auto pMP = std::make_shared<MapPoint>(mNextMapPointId++, pos, type);
+            auto pMP = std::make_shared<MapPoint>(mNextMapPointId++, position, type);
             pMP->AddObservation(mpCurrFrame, i); // 添加观测
             mpMap->InsertMapPoint(pMP);          // 加入地图
             mpCurrFrame->mvpMapPoints[i] = pMP;  // 关联至当前帧
+            return Eigen::Matrix4d::Identity();
         }
         mbInitialized = true;
         // 将当前帧作为关键帧插入地图（供可视化用）

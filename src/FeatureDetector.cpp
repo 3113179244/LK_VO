@@ -95,7 +95,41 @@ void FeatureDetector::TrackPrevLeftToCurrLeft(std::shared_ptr<Frame> prevFrame,
         currFrame->iFeaturePointnums = 0;
         return;
     }
+    // 反向光流校验
+    if (Config::g_nFlowBack)
+    {
+        std::vector<cv::Point2f> backwardPts; // 从 curr 反推回 prev 的点
+        std::vector<uchar> backwardStatus;
+        std::vector<float> backwardErr;
 
+        // 反向追踪：以当前帧的点为起点，追回上一帧
+        cv::calcOpticalFlowPyrLK(currImg, prevImg, validCurrPts, backwardPts,
+                                 backwardStatus, backwardErr, cv::Size(21, 21), 3);
+
+        // 重新构建有效的索引（只有正向成功 && 反向成功 && 往返误差 < 1.0 像素才算内点）
+        std::vector<int> validatedIndices;
+        for (size_t i = 0; i < validIndices.size(); ++i)
+        {
+            if (backwardStatus[i]) // 反向追踪成功
+            {
+                // 计算原始上一帧点 与 反向推算回来的点 的欧氏距离
+                double dist = cv::norm(validPrevPts[i] - backwardPts[i]);
+                if (dist < 1.0) // 误差阈值 1.0 像素（可根据场景微调）
+                {
+                    validatedIndices.push_back(validIndices[i]);
+                }
+            }
+        }
+        validIndices = validatedIndices;
+        validPrevPts.clear();
+        validCurrPts.clear();
+        for (int idx : validIndices)
+        {
+            validPrevPts.push_back(prevPts[idx]);
+            validCurrPts.push_back(currPts[idx]);
+        }
+        // 如果双向校验后点太少，就跳过双向校验结果，继续使用原来的 validIndices（即只做正向）
+    }
     // 第二步：帧间 RANSAC 剔除误匹配
     std::vector<int> inlierIdxInValid = FilterInterFrameMismatch(validPrevPts, validCurrPts);
     // 将内点索引映射回原始索引

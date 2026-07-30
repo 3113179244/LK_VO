@@ -20,7 +20,6 @@ class Tracker
 public:
     Tracker(std::shared_ptr<Camera> pCamera, std::shared_ptr<Map> pMap);
     ~Tracker() = default;
-
     Eigen::Matrix4d GrabImageStereo(const double timestamp, const cv::Mat &image0, const cv::Mat &image1, cv::Mat &matTrackDisplay);
 
 private:

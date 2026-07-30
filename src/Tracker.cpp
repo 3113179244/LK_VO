@@ -75,13 +75,13 @@ Eigen::Matrix4d Tracker::GrabImageStereo(const double timestamp, const cv::Mat &
             pMP->AddObservation(mpCurrFrame, i); // 添加观测
             mpMap->InsertMapPoint(pMP);          // 加入地图
             mpCurrFrame->mvpMapPoints[i] = pMP;  // 关联至当前帧
-            return Eigen::Matrix4d::Identity();
         }
         mbInitialized = true;
         // 将当前帧作为关键帧插入地图（供可视化用）
         mpMap->InsertKeyFrame(mpCurrFrame);
         std::cout << "[Tracker] Initial map generated with "
                   << mpCurrFrame->mvpMapPoints.size() << " points." << std::endl;
+        return Eigen::Matrix4d::Identity();
     }
     return Eigen::Matrix4d::Identity();
 }

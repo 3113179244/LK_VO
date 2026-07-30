@@ -98,7 +98,7 @@ Eigen::Matrix4d Tracker::GrabImageStereo(const double timestamp, const cv::Mat &
         for (int i = 0; i < N_curr; ++i)
         {
             auto pMP = mpCurrFrame->mvpMapPoints[i];
-            if (pMP && !pMP->isBad())
+            if (pMP && !pMP->isBad() && pMP->GetType() == MapPoint::NEAR)
             {
                 cv::Mat pos = pMP->GetMapPoints();
                 pts3d.push_back(cv::Point3f(pos.at<float>(0), pos.at<float>(1), pos.at<float>(2)));

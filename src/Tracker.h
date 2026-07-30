@@ -28,6 +28,8 @@ private:
     std::shared_ptr<FeatureDetector> mpFeatureDetector;
     std::shared_ptr<Frame> mpPrevFrame;
     std::shared_ptr<Frame> mpCurrFrame;
+    std::shared_ptr<Frame> mpLastKeyFrame ;
+    int mNumFramesSinceLastKeyFrame = 0;
     int mNextFrameId;
     cv::Mat mPrevImage0;
     bool mbInitialized;            // 是否已完成初始化

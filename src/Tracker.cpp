@@ -80,6 +80,8 @@ Eigen::Matrix4d Tracker::GrabImageStereo(const double timestamp, const cv::Mat &
             mpCurrFrame->mvpMapPoints[i] = pMP;  // 关联至当前帧
         }
         mbInitialized = true;
+        mpLastKeyFrame = mpCurrFrame;
+        mNumFramesSinceLastKeyFrame = 0;
         // 将当前帧作为关键帧插入地图（供可视化用）
         mpMap->InsertKeyFrame(mpCurrFrame);
         std::cout << "[Tracker] Initial map generated with "
@@ -143,6 +145,33 @@ Eigen::Matrix4d Tracker::GrabImageStereo(const double timestamp, const cv::Mat &
             pMP->AddObservation(mpCurrFrame, i);
             mpMap->InsertMapPoint(pMP);
             mpCurrFrame->mvpMapPoints[i] = pMP;
+        }
+        bool bNeedNewKF = false;
+        // 条件1：距离上一个关键帧已经超过 20 帧，强制插入
+        if (mNumFramesSinceLastKeyFrame >= 20)
+        {
+            bNeedNewKF = true;
+        }
+        // 条件2：当前帧特征点数量少于参考关键帧的 20%
+        else
+        {
+            int nCurr = mpCurrFrame->mvleftpixel.size();
+            int nRef = mpLastKeyFrame ? mpLastKeyFrame->mvleftpixel.size() : 0;
+            double ratio = (nRef > 0) ? (double)nCurr / nRef : 0.0;
+            if (ratio < 0.2) 
+            {
+                bNeedNewKF = true;
+            }
+        }
+        if (bNeedNewKF)
+        {
+            mpMap->InsertKeyFrame(mpCurrFrame);
+            mpLastKeyFrame = mpCurrFrame;
+            mNumFramesSinceLastKeyFrame = 0; 
+        }
+        else
+        {
+            mNumFramesSinceLastKeyFrame++;
         }
         return Eigen::Matrix4d::Identity();
     }

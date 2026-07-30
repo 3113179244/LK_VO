@@ -7,7 +7,7 @@
 // 实现构造函数
 Tracker::Tracker(std::shared_ptr<Camera> pCamera, std::shared_ptr<Map> pMap)
     : mpCamera(pCamera), mpMap(pMap),
-      mbInitialized(false), mNextMapPointId(0)
+      mbInitialized(true), mNextMapPointId(0), mNextFrameId(0)
 {
     mpFeatureDetector = std::make_shared<FeatureDetector>();
     std::cout << "[Tracker] Initialized successfully." << std::endl;
@@ -32,7 +32,7 @@ Eigen::Matrix4d Tracker::GrabImageStereo(const double timestamp, const cv::Mat &
         mPrevImage0 = image0.clone();
         std::cout << "Frame " << mpCurrFrame->mFrameId << " features: " << mpCurrFrame->mvleftpixel.size() << std::endl;
     }
-    if (!mbInitialized && mpCurrFrame->mvleftpixel.size() > 0)
+    if (mbInitialized)
     {
         const int N = static_cast<int>(mpCurrFrame->mvleftpixel.size());
         double fx = mpCamera->fx;
@@ -79,72 +79,72 @@ Eigen::Matrix4d Tracker::GrabImageStereo(const double timestamp, const cv::Mat &
             mpMap->InsertMapPoint(pMP);          // 加入地图
             mpCurrFrame->mvpMapPoints[i] = pMP;  // 关联至当前帧
         }
-        mbInitialized = true;
+        mpCurrFrame->SetPose(Eigen::Matrix4f::Identity());
         mpLastKeyFrame = mpCurrFrame;
         mNumFramesSinceLastKeyFrame = 0;
         // 将当前帧作为关键帧插入地图（供可视化用）
         mpMap->InsertKeyFrame(mpCurrFrame);
+        mbInitialized = false;
         std::cout << "[Tracker] Initial map generated with "
                   << mpCurrFrame->mvpMapPoints.size() << " points." << std::endl;
-        return Eigen::Matrix4d::Identity();
+        return mpCurrFrame->GetPose().cast<double>();
     }
-    if (mbInitialized && mpCurrFrame->mvleftpixel.size() > 0)
+    if (!mbInitialized)
     {
-        mpCurrFrame->mvpMapPoints.assign(mpCurrFrame->mvleftpixel.size(), nullptr);
-        const int N = static_cast<int>(mpCurrFrame->mvleftpixel.size());
-        const double fx = mpCamera->fx;
-        const double fy = mpCamera->fy;
-        const double cx = mpCamera->cx;
-        const double cy = mpCamera->cy;
-        const double baseline = mpCamera->mBaseline;
+        std::vector<cv::Point3f> pts3d;
+        std::vector<cv::Point2f> pts2d;
+        const int N_curr = mpCurrFrame->mvleftpixel.size();
 
-        // 遍历所有特征点
-        for (int i = 0; i < N; ++i)
+        for (int i = 0; i < N_curr; ++i)
         {
-            // 如果该点已经关联了地图点，跳过
-            if (mpCurrFrame->mvpMapPoints[i] != nullptr)
-                continue;
+            auto pMP = mpCurrFrame->mvpMapPoints[i];
+            if (pMP && !pMP->isBad())
+            {
+                cv::Mat pos = pMP->GetMapPoints();
+                pts3d.push_back(cv::Point3f(pos.at<float>(0), pos.at<float>(1), pos.at<float>(2)));
+                pts2d.push_back(mpCurrFrame->mvleftpixel[i].pt);
+            }
+        }
 
-            const cv::Point2f &ptLeft = mpCurrFrame->mvleftpixel[i].pt;
-            const cv::Point2f &ptRight = mpCurrFrame->mvrightpixel[i].pt;
+        if (pts3d.size() >= 10)
+        {
+            cv::Mat K = (cv::Mat_<double>(3, 3) << mpCamera->fx, 0, mpCamera->cx,
+                         0, mpCamera->fy, mpCamera->cy,
+                         0, 0, 1);
+            cv::Mat rvec, tvec, inliers;
+            cv::solvePnPRansac(pts3d, pts2d, K, cv::Mat(), rvec, tvec,
+                               false, 100, 4.0, 0.99, inliers);
 
-            // 检查右图匹配是否有效
-            if (ptRight.x < 0 || ptRight.y < 0)
-                continue;
-
-            // 计算视差（左图x - 右图x）
-            float disparity = ptLeft.x - ptRight.x;
-            if (disparity <= 0.0f)
-                continue;
-
-            // 计算深度
-            float depth = static_cast<float>(fx * baseline / disparity);
-            if (depth <= 0.0f)
-                continue;
-
-            // 判断远/近
-            MapPoint::PointType type = (depth > 40.0 * baseline) ? MapPoint::FAR : MapPoint::NEAR;
-
-            // 归一化坐标 -> 世界坐标（当前帧位姿为单位阵，简化）
-            // 实际应使用当前帧的位姿将点变换到世界系，这里我们假定相机位于原点
-            float u = (ptLeft.x - static_cast<float>(cx)) / static_cast<float>(fx);
-            float v = (ptLeft.y - static_cast<float>(cy)) / static_cast<float>(fy);
-            Eigen::Vector3d P_cam(u * depth, v * depth, depth); // 相机坐标系
-            // 如果当前帧有真实位姿，需转换到世界系：
-            // Eigen::Matrix4d Tcw = mpCurrFrame->GetPose().cast<double>();
-            // Eigen::Vector3d P_world = Tcw.inverse().block<3,3>(0,0) * P_cam + Tcw.inverse().block<3,1>(0,3);
-            // 这里简化，直接使用相机坐标作为世界坐标（假设世界系与第一帧相机系重合）
-
-            cv::Mat position(3, 1, CV_32F);
-            position.at<float>(0) = static_cast<float>(P_cam.x());
-            position.at<float>(1) = static_cast<float>(P_cam.y());
-            position.at<float>(2) = static_cast<float>(P_cam.z());
-
-            // 创建地图点
-            auto pMP = std::make_shared<MapPoint>(mNextMapPointId++, position, type);
-            pMP->AddObservation(mpCurrFrame, i);
-            mpMap->InsertMapPoint(pMP);
-            mpCurrFrame->mvpMapPoints[i] = pMP;
+            if (inliers.rows >= 8)
+            {
+                cv::Mat R;
+                cv::Rodrigues(rvec, R);
+                Eigen::Matrix4d Tcw;
+                for (int i = 0; i < 3; ++i)
+                    for (int j = 0; j < 3; ++j)
+                        Tcw(i, j) = R.at<double>(i, j);
+                Tcw(0, 3) = tvec.at<double>(0);
+                Tcw(1, 3) = tvec.at<double>(1);
+                Tcw(2, 3) = tvec.at<double>(2);
+                Tcw(3, 3) = 1.0;
+                mpCurrFrame->SetPose(Tcw.cast<float>());
+            }
+            else
+            {
+                // PnP 内点不足，沿用上一帧位姿
+                if (mpPrevFrame)
+                    mpCurrFrame->SetPose(mpPrevFrame->GetPose());
+                else
+                    mpCurrFrame->SetPose(Eigen::Matrix4f::Identity());
+            }
+        }
+        else
+        {
+            // 3D-2D 对应点不足，沿用上一帧位姿
+            if (mpPrevFrame)
+                mpCurrFrame->SetPose(mpPrevFrame->GetPose());
+            else
+                mpCurrFrame->SetPose(Eigen::Matrix4f::Identity());
         }
         bool bNeedNewKF = false;
         // 条件1：距离上一个关键帧已经超过 20 帧，强制插入
@@ -158,22 +158,78 @@ Eigen::Matrix4d Tracker::GrabImageStereo(const double timestamp, const cv::Mat &
             int nCurr = mpCurrFrame->mvleftpixel.size();
             int nRef = mpLastKeyFrame ? mpLastKeyFrame->mvleftpixel.size() : 0;
             double ratio = (nRef > 0) ? (double)nCurr / nRef : 0.0;
-            if (ratio < 0.2) 
+            if (ratio < 0.2)
             {
                 bNeedNewKF = true;
             }
         }
         if (bNeedNewKF)
         {
+            const int N = static_cast<int>(mpCurrFrame->mvleftpixel.size());
+            const double fx = mpCamera->fx;
+            const double fy = mpCamera->fy;
+            const double cx = mpCamera->cx;
+            const double cy = mpCamera->cy;
+            const double baseline = mpCamera->mBaseline;
+
+            // 遍历所有特征点
+            for (int i = 0; i < N; ++i)
+            {
+                // 如果该点已经关联了地图点，跳过
+                if (mpCurrFrame->mvpMapPoints[i] != nullptr)
+                    continue;
+
+                const cv::Point2f &ptLeft = mpCurrFrame->mvleftpixel[i].pt;
+                const cv::Point2f &ptRight = mpCurrFrame->mvrightpixel[i].pt;
+
+                // 检查右图匹配是否有效
+                if (ptRight.x < 0 || ptRight.y < 0)
+                    continue;
+
+                // 计算视差（左图x - 右图x）
+                float disparity = ptLeft.x - ptRight.x;
+                if (disparity <= 0.0f)
+                    continue;
+
+                // 计算深度
+                float depth = static_cast<float>(fx * baseline / disparity);
+                if (depth <= 0.0f)
+                    continue;
+
+                // 判断远/近
+                MapPoint::PointType type = (depth > 40.0 * baseline) ? MapPoint::FAR : MapPoint::NEAR;
+
+                // 归一化坐标 -> 世界坐标（当前帧位姿为单位阵，简化）
+                // 实际应使用当前帧的位姿将点变换到世界系，这里我们假定相机位于原点
+                float u = (ptLeft.x - static_cast<float>(cx)) / static_cast<float>(fx);
+                float v = (ptLeft.y - static_cast<float>(cy)) / static_cast<float>(fy);
+                Eigen::Vector3d P_cam(u * depth, v * depth, depth); // 相机坐标系
+
+                Eigen::Matrix4f Tcw_f = mpCurrFrame->GetPose();
+                Eigen::Matrix4d Tcw = Tcw_f.cast<double>();
+                Eigen::Vector4d P_cam_homo(P_cam.x(), P_cam.y(), P_cam.z(), 1.0);
+                Eigen::Vector4d P_world_homo = Tcw.inverse() * P_cam_homo;
+                Eigen::Vector3d P_world = P_world_homo.head<3>() / P_world_homo.w();
+
+                cv::Mat position(3, 1, CV_32F);
+                position.at<float>(0) = static_cast<float>(P_world.x());
+                position.at<float>(1) = static_cast<float>(P_world.y());
+                position.at<float>(2) = static_cast<float>(P_world.z());
+
+                // 创建地图点
+                auto pMP = std::make_shared<MapPoint>(mNextMapPointId++, position, type);
+                pMP->AddObservation(mpCurrFrame, i);
+                mpMap->InsertMapPoint(pMP);
+                mpCurrFrame->mvpMapPoints[i] = pMP;
+            }
             mpMap->InsertKeyFrame(mpCurrFrame);
             mpLastKeyFrame = mpCurrFrame;
-            mNumFramesSinceLastKeyFrame = 0; 
+            mNumFramesSinceLastKeyFrame = 0;
         }
         else
         {
             mNumFramesSinceLastKeyFrame++;
         }
-        return Eigen::Matrix4d::Identity();
+        return mpCurrFrame->GetPose().cast<double>();
     }
-    return Eigen::Matrix4d::Identity();
 }

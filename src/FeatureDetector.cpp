@@ -147,7 +147,8 @@ void FeatureDetector::TrackPrevLeftToCurrLeft(std::shared_ptr<Frame> prevFrame,
     filteredPts.reserve(finalIndices.size());
     filteredIds.reserve(finalIndices.size());
     filteredCnt.reserve(finalIndices.size());
-
+    std::vector<std::shared_ptr<MapPoint>> filteredMPs;
+    filteredMPs.reserve(finalIndices.size());
     for (int idx : finalIndices)
     {
         cv::Point2f pt = currPts[idx];
@@ -167,12 +168,21 @@ void FeatureDetector::TrackPrevLeftToCurrLeft(std::shared_ptr<Frame> prevFrame,
         filteredPts.push_back(cv::KeyPoint(pt, 1.0f));
         filteredIds.push_back(prevFrame->mvFeatureIds[idx]);
         filteredCnt.push_back(prevFrame->mvTrackCnt[idx] + 1);
+        if (idx < static_cast<int>(prevFrame->mvpMapPoints.size()))
+        {
+            filteredMPs.push_back(prevFrame->mvpMapPoints[idx]);
+        }
+        else
+        {
+            filteredMPs.push_back(nullptr);
+        }
     }
 
     // 将过滤后的数据移交给当前帧
     currFrame->mvleftpixel = std::move(filteredPts);
     currFrame->mvFeatureIds = std::move(filteredIds);
     currFrame->mvTrackCnt = std::move(filteredCnt);
+    currFrame->mvpMapPoints = std::move(filteredMPs);
     currFrame->iFeaturePointnums = static_cast<int>(currFrame->mvleftpixel.size());
 }
 
@@ -195,22 +205,26 @@ void FeatureDetector::SortPointsByTrackCount(std::shared_ptr<Frame> currFrame)
     // 临时存储排序后的结果
     std::vector<cv::KeyPoint> sortedLeft;
     std::vector<int> sortedIds, sortedCnt;
-
+    std::vector<std::shared_ptr<MapPoint>> sortedMPs;
     sortedLeft.reserve(N);
     sortedIds.reserve(N);
     sortedCnt.reserve(N);
-
+    sortedMPs.reserve(N);
+    if (currFrame->mvpMapPoints.size() != N)
+        currFrame->mvpMapPoints.resize(N, nullptr);
     for (size_t idx : indices)
     {
         sortedLeft.push_back(currFrame->mvleftpixel[idx]);
         sortedIds.push_back(currFrame->mvFeatureIds[idx]);
         sortedCnt.push_back(currFrame->mvTrackCnt[idx]);
+        sortedMPs.push_back(currFrame->mvpMapPoints[idx]);
     }
 
     // 使用 std::move 移动赋值，提高性能
     currFrame->mvleftpixel = std::move(sortedLeft);
     currFrame->mvFeatureIds = std::move(sortedIds);
     currFrame->mvTrackCnt = std::move(sortedCnt);
+    currFrame->mvpMapPoints = std::move(sortedMPs);
 }
 
 /**
@@ -256,6 +270,7 @@ void FeatureDetector::DetectNewFeatures(std::shared_ptr<Frame> currFrame, const 
             currFrame->mvleftpixel.push_back(cv::KeyPoint(pt, 1.0f));
             currFrame->mvFeatureIds.push_back(nextFeatureId++); // 分配新的全局 ID
             currFrame->mvTrackCnt.push_back(1);                 // 首次被提取，追踪次数设为 1
+            currFrame->mvpMapPoints.push_back(nullptr);
         }
         currFrame->iFeaturePointnums = static_cast<int>(currFrame->mvleftpixel.size());
     }

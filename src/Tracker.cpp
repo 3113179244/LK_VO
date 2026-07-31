@@ -98,24 +98,20 @@ Eigen::Matrix4d Tracker::GrabImageStereo(const double timestamp, const cv::Mat &
         for (int i = 0; i < N; ++i)
         {
             auto pMP = mpCurrFrame->mvpMapPoints[i];
-            if (pMP)
+            if (pMP && !pMP->isBad())
             {
-                if (pMP->isBad())
-                    badCount++;
-                else if (pMP->GetType() == MapPoint::NEAR)
-                {
+                cv::Mat pos = pMP->GetMapPoints();
+                pts3d.push_back(cv::Point3f(pos.at<float>(0), pos.at<float>(1), pos.at<float>(2)));
+                pts2d.push_back(mpCurrFrame->mvleftpixel[i].pt);
+                if (pMP->GetType() == MapPoint::NEAR)
                     nearCount++;
-                    cv::Mat pos = pMP->GetMapPoints();
-                    pts3d.push_back(cv::Point3f(pos.at<float>(0), pos.at<float>(1), pos.at<float>(2)));
-                    pts2d.push_back(mpCurrFrame->mvleftpixel[i].pt);
-                }
                 else
                     farCount++;
             }
+            else if (pMP && pMP->isBad())
+                badCount++;
             else
-            {
                 nullCount++;
-            }
         }
         std::cout << "[Tracker] Frame " << mpCurrFrame->mFrameId
                   << " | NEAR: " << nearCount
@@ -149,22 +145,6 @@ Eigen::Matrix4d Tracker::GrabImageStereo(const double timestamp, const cv::Mat &
                 std::cout << "Frame " << mpCurrFrame->mFrameId << " PnP success pose:\n"
                           << mpCurrFrame->GetPose().matrix() << std::endl;
             }
-            else
-            {
-                if (mpPrevFrame)
-                    mpCurrFrame->SetPose(mpPrevFrame->GetPose());
-                else
-                    mpCurrFrame->SetPose(Eigen::Matrix4f::Identity());
-            }
-        }
-        else
-        {
-            if (mpPrevFrame)
-                mpCurrFrame->SetPose(mpPrevFrame->GetPose());
-            else
-                mpCurrFrame->SetPose(Eigen::Matrix4f::Identity());
-            std::cerr << "[Tracker] Warning: Insufficient 3D-2D matches for PnP (found "
-                      << pts3d.size() << " points). Using previous frame pose." << std::endl;
         }
         int nNear = 0;
         for (const auto &pMP : mpCurrFrame->mvpMapPoints)

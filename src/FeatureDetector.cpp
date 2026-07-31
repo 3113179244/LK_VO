@@ -141,41 +141,38 @@ void FeatureDetector::TrackPrevLeftToCurrLeft(std::shared_ptr<Frame> prevFrame,
     }
 
     // 第三步：对剩余的内点进行去重（防止空间扎堆）
+    // 第三步：网格非极大值抑制（显式NMS）
     std::vector<cv::KeyPoint> filteredPts;
     std::vector<int> filteredIds;
     std::vector<int> filteredCnt;
+    std::vector<std::shared_ptr<MapPoint>> filteredMPs;
     filteredPts.reserve(finalIndices.size());
     filteredIds.reserve(finalIndices.size());
     filteredCnt.reserve(finalIndices.size());
-    std::vector<std::shared_ptr<MapPoint>> filteredMPs;
     filteredMPs.reserve(finalIndices.size());
+
+    const int gridSize = minFeatureDist;         // 30 像素
+    std::set<std::pair<int, int>> occupiedGrids; // 记录已占用的网格索引
+
     for (int idx : finalIndices)
     {
         cv::Point2f pt = currPts[idx];
+        int gridX = static_cast<int>(pt.x / gridSize);
+        int gridY = static_cast<int>(pt.y / gridSize);
+        auto gridKey = std::make_pair(gridX, gridY);
 
-        bool tooClose = false;
-        for (const auto &exist_kp : filteredPts)
-        {
-            if (cv::norm(pt - exist_kp.pt) < minFeatureDist)
-            {
-                tooClose = true;
-                break;
-            }
-        }
-        if (tooClose)
+        // 若该网格已被占用，则丢弃当前点（因为遍历顺序决定它追踪次数更低）
+        if (occupiedGrids.find(gridKey) != occupiedGrids.end())
             continue;
 
+        occupiedGrids.insert(gridKey); // 标记该网格已被占用
         filteredPts.push_back(cv::KeyPoint(pt, 1.0f));
         filteredIds.push_back(prevFrame->mvFeatureIds[idx]);
         filteredCnt.push_back(prevFrame->mvTrackCnt[idx] + 1);
         if (idx < static_cast<int>(prevFrame->mvpMapPoints.size()))
-        {
             filteredMPs.push_back(prevFrame->mvpMapPoints[idx]);
-        }
         else
-        {
             filteredMPs.push_back(nullptr);
-        }
     }
 
     // 将过滤后的数据移交给当前帧

@@ -3,7 +3,7 @@
 #include "Config.h"
 #include <algorithm>
 #include <numeric>
-
+#include "MapPoint.h" 
 // 静态成员变量初始化：用于生成全局唯一的特征点全局 ID
 int FeatureDetector::nextFeatureId = 0;
 
@@ -161,20 +161,28 @@ void FeatureDetector::TrackPrevLeftToCurrLeft(std::shared_ptr<Frame> prevFrame,
         int gridY = static_cast<int>(pt.y / gridSize);
         auto gridKey = std::make_pair(gridX, gridY);
 
-        // 若该网格已被占用，则丢弃当前点（因为遍历顺序决定它追踪次数更低）
         if (occupiedGrids.find(gridKey) != occupiedGrids.end())
             continue;
 
-        occupiedGrids.insert(gridKey); // 标记该网格已被占用
+        occupiedGrids.insert(gridKey);
+
+        // 获取地图点指针（可能为空）
+        std::shared_ptr<MapPoint> pMP = nullptr;
+        if (idx < static_cast<int>(prevFrame->mvpMapPoints.size()))
+            pMP = prevFrame->mvpMapPoints[idx];
+
+        // 计算当前帧中该点的新索引（在 push 之前）
+        size_t newIdx = filteredPts.size();
+
+        // 如果有地图点，添加当前帧的观测
+        if (pMP)
+            pMP->AddObservation(currFrame, newIdx);
+
         filteredPts.push_back(cv::KeyPoint(pt, 1.0f));
         filteredIds.push_back(prevFrame->mvFeatureIds[idx]);
         filteredCnt.push_back(prevFrame->mvTrackCnt[idx] + 1);
-        if (idx < static_cast<int>(prevFrame->mvpMapPoints.size()))
-            filteredMPs.push_back(prevFrame->mvpMapPoints[idx]);
-        else
-            filteredMPs.push_back(nullptr);
+        filteredMPs.push_back(pMP);
     }
-
     // 将过滤后的数据移交给当前帧
     currFrame->mvleftpixel = std::move(filteredPts);
     currFrame->mvFeatureIds = std::move(filteredIds);
@@ -345,6 +353,11 @@ void FeatureDetector::FilterStereoMismatch(std::shared_ptr<Frame> currFrame)
             if (!status[i])
             {
                 int idx = validIndices[i];
+                // 如果该点关联了地图点，则移除当前帧对该点的观测
+                if (idx < static_cast<int>(currFrame->mvpMapPoints.size()) && currFrame->mvpMapPoints[idx] != nullptr)
+                {
+                    currFrame->mvpMapPoints[idx]->RemoveObservation(currFrame);
+                }
                 currFrame->mvrightpixel[idx] = cv::KeyPoint(cv::Point2f(-1.0f, -1.0f), 1.0f);
             }
         }

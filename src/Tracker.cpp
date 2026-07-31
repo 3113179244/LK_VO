@@ -94,7 +94,6 @@ Eigen::Matrix4d Tracker::GrabImageStereo(const double timestamp, const cv::Mat &
         // 收集已有地图点（NEAR）用于PnP
         std::vector<cv::Point3f> pts3d;
         std::vector<cv::Point2f> pts2d;
-        int nearCount = 0, farCount = 0, badCount = 0, nullCount = 0;
         for (int i = 0; i < N; ++i)
         {
             auto pMP = mpCurrFrame->mvpMapPoints[i];
@@ -103,21 +102,8 @@ Eigen::Matrix4d Tracker::GrabImageStereo(const double timestamp, const cv::Mat &
                 cv::Mat pos = pMP->GetMapPoints();
                 pts3d.push_back(cv::Point3f(pos.at<float>(0), pos.at<float>(1), pos.at<float>(2)));
                 pts2d.push_back(mpCurrFrame->mvleftpixel[i].pt);
-                if (pMP->GetType() == MapPoint::NEAR)
-                    nearCount++;
-                else
-                    farCount++;
             }
-            else if (pMP && pMP->isBad())
-                badCount++;
-            else
-                nullCount++;
         }
-        std::cout << "[Tracker] Frame " << mpCurrFrame->mFrameId
-                  << " | NEAR: " << nearCount
-                  << " | FAR: " << farCount
-                  << " | BAD: " << badCount
-                  << " | NULL: " << nullCount << std::endl;
 
         // PnP 估计当前帧位姿
         if (pts3d.size() >= 10)
@@ -147,8 +133,8 @@ Eigen::Matrix4d Tracker::GrabImageStereo(const double timestamp, const cv::Mat &
                 Tcw(2, 3) = tvec.at<double>(2);
                 Tcw(3, 3) = 1.0;
                 mpCurrFrame->SetPose(Tcw.cast<float>());
-                std::cout << "Frame " << mpCurrFrame->mFrameId << " PnP success pose:\n"
-                          << mpCurrFrame->GetPose().matrix() << std::endl;
+                // std::cout << "Frame " << mpCurrFrame->mFrameId << " PnP success pose:\n"
+                //           << mpCurrFrame->GetPose().matrix() << std::endl;
             }
         }
         int nNear = 0;
@@ -182,8 +168,6 @@ Eigen::Matrix4d Tracker::GrabImageStereo(const double timestamp, const cv::Mat &
         // 如果是关键帧，则生成新的地图点
         if (bNeedNewKF)
         {
-            std::cout << "[Tracker] Need new KF | NEAR: " << nNear
-                      << " | Frames since last KF: " << mNumFramesSinceLastKeyFrame << std::endl;
             // 确保 mvpMapPoints 大小与特征点一致
             if (static_cast<int>(mpCurrFrame->mvpMapPoints.size()) != N)
                 mpCurrFrame->mvpMapPoints.resize(N, nullptr);
@@ -231,7 +215,32 @@ Eigen::Matrix4d Tracker::GrabImageStereo(const double timestamp, const cv::Mat &
                 mpMap->InsertMapPoint(pMP);
                 mpCurrFrame->mvpMapPoints[i] = pMP;
             }
-
+            int nearCount = 0, farCount = 0, badCount = 0, nullCount = 0;
+            for (int i = 0; i < N; ++i)
+            {
+                auto pMP = mpCurrFrame->mvpMapPoints[i];
+                if (pMP && !pMP->isBad())
+                {
+                    if (pMP->GetType() == MapPoint::NEAR)
+                        nearCount++;
+                    else
+                        farCount++;
+                }
+                else if (pMP && pMP->isBad())
+                {
+                    badCount++;
+                }
+                else
+                {
+                    nullCount++;
+                }
+            }
+            std::cout << "[KeyFrame] Frame " << mpCurrFrame->mFrameId
+                      << " | NEAR: " << nearCount
+                      << " | FAR: " << farCount
+                      << " | BAD: " << badCount
+                      << " | NULL: " << nullCount
+                      << " | Frames since last KF: " << mNumFramesSinceLastKeyFrame << std::endl;
             // 插入关键帧并重置计数器
             mpMap->InsertKeyFrame(mpCurrFrame);
             mpLastKeyFrame = mpCurrFrame;

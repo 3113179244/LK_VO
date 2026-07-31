@@ -71,7 +71,7 @@ void FeatureDetector::TrackPrevLeftToCurrLeft(std::shared_ptr<Frame> prevFrame,
     std::vector<float> err;    // 光流跟踪误差
 
     // 利用 OpenCV 的金字塔 LK 光流算法追踪上一帧特征点到当前帧
-    cv::calcOpticalFlowPyrLK(prevImg, currImg, prevPts, currPts, status, err, cv::Size(21, 21), 3);
+    cv::calcOpticalFlowPyrLK(prevImg, currImg, prevPts, currPts, status, err, cv::Size(15, 15), 3);
 
     // 第一步：初步筛选（status 成功且在边界内）
     std::vector<cv::Point2f> validPrevPts, validCurrPts;

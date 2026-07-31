@@ -44,6 +44,9 @@ private:
     void DrawCurrentCamera();
     void DrawCamera(const Eigen::Matrix4f& Tcw, float r, float g, float b, float scale = 0.1f);
 
+    // 【新增】获取当前相机的 Pangolin OpenGL 矩阵（支持跟随镜头）
+    pangolin::OpenGlMatrix GetCurrentOpenGLCameraMatrix();
+
     std::shared_ptr<Map> mpMap;
     
     // 线程同步

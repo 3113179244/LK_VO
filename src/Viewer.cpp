@@ -20,15 +20,36 @@ Viewer::Viewer(std::shared_ptr<Map> pMap)
     mCurrentTcw = Eigen::Matrix4d::Identity();
 }
 
+// 【新增辅助函数】获取 OpenGL 列优先格式的当前相机 Pose (Twc)
+pangolin::OpenGlMatrix Viewer::GetCurrentOpenGLCameraMatrix()
+{
+    Eigen::Matrix4d Twc;
+    {
+        std::unique_lock<std::mutex> lock(mMutexCurrentCam);
+        Twc = mCurrentTcw.inverse();
+    }
+
+    pangolin::OpenGlMatrix M;
+    // Pangolin 为列优先 (Column-Major)，必须按正确的行列顺序填入 M.m
+    for (int i = 0; i < 4; i++)
+    {
+        for (int j = 0; j < 4; j++)
+        {
+            M.m[j * 4 + i] = static_cast<float>(Twc(i, j));
+        }
+    }
+    return M;
+}
+
 void Viewer::Run()
 {
-    // 1. 创建Pangolin窗口
+    // 1. 创建 Pangolin 窗口
     pangolin::CreateWindowAndBind("LK_VO: Map Viewer", 1024, 768);
     glEnable(GL_DEPTH_TEST);
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
-    // 2. 创建菜单面板（参照ORB-SLAM2）
+    // 2. 创建菜单面板
     pangolin::CreatePanel("menu").SetBounds(0.0, 1.0, 0.0, pangolin::Attach::Pix(175));
     pangolin::Var<bool> menuFollowCamera("menu.Follow Camera", true, true);
     pangolin::Var<bool> menuShowPoints("menu.Show Points", true, true);
@@ -36,59 +57,47 @@ void Viewer::Run()
     pangolin::Var<bool> menuShowGraph("menu.Show Graph", true, true);
     pangolin::Var<bool> menuReset("menu.Reset", false, false);
 
-    // 3. 相机渲染状态
+    // 3. 相机渲染初始视角
     pangolin::OpenGlRenderState s_cam(
         pangolin::ProjectionMatrix(1024, 768, 500, 500, 512, 384, 0.1, 1000),
-        pangolin::ModelViewLookAt(0, -0.7, -1.8, 0, 0, 0, 0.0, -1.0, 0.0));
+        pangolin::ModelViewLookAt(0, -10, -20, 0, 0, 0, 0.0, -1.0, 0.0));
 
     // 4. 创建显示视图
     pangolin::View &d_cam = pangolin::CreateDisplay()
                                 .SetBounds(0.0, 1.0, pangolin::Attach::Pix(175), 1.0, -1024.0f / 768.0f)
                                 .SetHandler(new pangolin::Handler3D(s_cam));
 
-    bool bFollow = true; // 内部跟踪跟随状态
+    bool bFollow = true; // 内部跟踪跟随状态标识
 
     while (1)
     {
-        // 清屏
+        // 清屏（白色背景）
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-        glClearColor(1.0f, 1.0f, 1.0f, 1.0f); // 白色背景
+        glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
 
-        // 获取当前相机位姿（世界到相机）
-        Eigen::Matrix4d Twc = Eigen::Matrix4d::Identity();
-        {
-            std::unique_lock<std::mutex> lock(mMutexCurrentCam);
-            Twc = mCurrentTcw.inverse();
-        }
-
-        // 更新内部状态与菜单同步
+        // 同步 UI 菜单状态
         mbFollowCamera = menuFollowCamera;
         mbShowPoints = menuShowPoints;
         mbShowKeyFrames = menuShowKeyFrames;
         mbShowGraph = menuShowGraph;
 
-        // 处理跟随
-        if (mbFollowCamera && !bFollow)
+        // 获取用于跟随的 OpenGL 矩阵
+        pangolin::OpenGlMatrix Twc_gl = GetCurrentOpenGLCameraMatrix();
+
+        // 核心改动：跟随镜头（Follow Camera）逻辑
+        if (mbFollowCamera && bFollow)
         {
-            pangolin::OpenGlMatrix Twc_gl;
-            for(int i=0; i<4; i++)
-                for(int j=0; j<4; j++)
-                    Twc_gl.m[i*4+j] = Twc(i,j);
+            s_cam.Follow(Twc_gl);
+        }
+        else if (mbFollowCamera && !bFollow)
+        {
+            s_cam.SetModelViewMatrix(pangolin::ModelViewLookAt(0, -10, -20, 0, 0, 0, 0.0, -1.0, 0.0));
             s_cam.Follow(Twc_gl);
             bFollow = true;
         }
         else if (!mbFollowCamera && bFollow)
         {
-            s_cam.SetModelViewMatrix(pangolin::ModelViewLookAt(0, -0.7, -1.8, 0, 0, 0, 0.0, -1.0, 0.0));
             bFollow = false;
-        }
-        else if (mbFollowCamera && bFollow)
-        {
-            pangolin::OpenGlMatrix Twc_gl;
-            for(int i=0; i<4; i++)
-                for(int j=0; j<4; j++)
-                    Twc_gl.m[i*4+j] = Twc(i,j);
-            s_cam.Follow(Twc_gl);
         }
 
         // 激活视图
@@ -101,35 +110,33 @@ void Viewer::Run()
         {
             DrawKeyFrames(); // 绘制关键帧相机
             if (mbShowGraph)
-                DrawGraph(); // 绘制共视图连线（顺序连接）
+                DrawGraph(); // 绘制轨迹连线
         }
-        DrawCurrentCamera();
+        DrawCurrentCamera(); // 绘制当前实时相机
 
-        // 提交3D渲染
+        // 提交 3D 渲染
         pangolin::FinishFrame();
 
-        // 处理重置请求（菜单点击Reset）
+        // 处理 Reset 重置请求
         if (menuReset)
         {
-            // 重置菜单状态为默认
             menuFollowCamera = true;
             menuShowPoints = true;
             menuShowKeyFrames = true;
             menuShowGraph = true;
-            // 重置内部状态
+
             mbFollowCamera = true;
             mbShowPoints = true;
             mbShowKeyFrames = true;
             mbShowGraph = true;
             bFollow = true;
-            // 重置相机视角到初始位置
-            s_cam.SetModelViewMatrix(pangolin::ModelViewLookAt(0, -0.7, -1.8, 0, 0, 0, 0.0, -1.0, 0.0));
-            // 设置重置请求标志，供外部处理
+
+            s_cam.SetModelViewMatrix(pangolin::ModelViewLookAt(0, -10, -20, 0, 0, 0, 0.0, -1.0, 0.0));
+            
             {
                 std::unique_lock<std::mutex> lock(mMutexReset);
                 mbResetRequested = true;
             }
-            // 重置菜单变量
             menuReset = false;
         }
 
@@ -138,7 +145,7 @@ void Viewer::Run()
         {
             while (isStopped())
             {
-                usleep(3000); // 等待释放
+                usleep(3000);
             }
         }
 
@@ -146,7 +153,6 @@ void Viewer::Run()
         if (CheckFinish())
             break;
 
-        // 小延时，避免CPU占用过高
         std::this_thread::sleep_for(std::chrono::milliseconds(5));
     }
 
@@ -160,7 +166,7 @@ void Viewer::DrawMapPoints()
 
     glPointSize(mPointSize);
     glBegin(GL_POINTS);
-    glColor3f(0.0, 0.0, 0.0); // 黑色
+    glColor3f(0.0f, 0.0f, 0.0f); // 黑色点云
 
     for (size_t i = 0; i < vpMPs.size(); i++)
     {
@@ -190,7 +196,6 @@ void Viewer::DrawGraph()
     std::vector<std::shared_ptr<Frame>> vpKFs = mpMap->GetAllKeyFrames();
     if (vpKFs.size() < 2) return;
 
-    // 简单的共视图：按顺序连接（形成轨迹）
     glLineWidth(mGraphLineWidth);
     glColor3f(0.0f, 0.0f, 0.0f);
     glBegin(GL_LINES);
@@ -284,7 +289,7 @@ bool Viewer::CheckReset()
 {
     std::unique_lock<std::mutex> lock(mMutexReset);
     bool ret = mbResetRequested;
-    mbResetRequested = false; // 消费标志
+    mbResetRequested = false;
     return ret;
 }
 

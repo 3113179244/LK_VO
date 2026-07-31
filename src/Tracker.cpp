@@ -127,8 +127,13 @@ Eigen::Matrix4d Tracker::GrabImageStereo(const double timestamp, const cv::Mat &
                          0, 0, 1);
             cv::Mat rvec, tvec, inliers;
             cv::solvePnPRansac(pts3d, pts2d, K, cv::Mat(), rvec, tvec,
-                               false, 100, 4.0, 0.99, inliers);
-
+                               false,       // useExtrinsicGuess
+                               300,         // iterationsCount (ORB-SLAM2 最大迭代次数)
+                               sqrt(5.991), // reprojectionError (像素阈值 ≈ 2.45)
+                               0.99,        // confidence (ORB-SLAM2 置信度)
+                               inliers,
+                               cv::SOLVEPNP_EPNP // 推荐使用 EPnP，与 ORB-SLAM2 一致
+            );
             if (inliers.rows >= 8)
             {
                 cv::Mat R;

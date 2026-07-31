@@ -166,15 +166,26 @@ Eigen::Matrix4d Tracker::GrabImageStereo(const double timestamp, const cv::Mat &
             std::cerr << "[Tracker] Warning: Insufficient 3D-2D matches for PnP (found "
                       << pts3d.size() << " points). Using previous frame pose." << std::endl;
         }
-
+        int nNear = 0;
+        for (const auto &pMP : mpCurrFrame->mvpMapPoints)
+        {
+            if (pMP && !pMP->isBad() && pMP->GetType() == MapPoint::NEAR)
+            {
+                nNear++;
+            }
+        }
         // 判断是否需要新的关键帧
         bool bNeedNewKF = false;
-        if (mNumFramesSinceLastKeyFrame >= 20)
+        // 条件1：距离上次关键帧超过20帧
+        // 条件2：近点数少于30且距离上次关键帧至少5帧（防止过于频繁）
+        if (mNumFramesSinceLastKeyFrame >= 20 ||
+            (nNear < 30 && mNumFramesSinceLastKeyFrame >= 5))
         {
             bNeedNewKF = true;
         }
         else
         {
+            // 原有条件：特征点数量比例下降
             int nCurr = mpCurrFrame->mvleftpixel.size();
             int nRef = mpLastKeyFrame ? mpLastKeyFrame->mvleftpixel.size() : 0;
             double ratio = (nRef > 0) ? (double)nCurr / nRef : 0.0;
@@ -183,10 +194,11 @@ Eigen::Matrix4d Tracker::GrabImageStereo(const double timestamp, const cv::Mat &
                 bNeedNewKF = true;
             }
         }
-
         // 如果是关键帧，则生成新的地图点
         if (bNeedNewKF)
         {
+            std::cout << "[Tracker] Need new KF | NEAR: " << nNear
+                      << " | Frames since last KF: " << mNumFramesSinceLastKeyFrame << std::endl;
             // 确保 mvpMapPoints 大小与特征点一致
             if (static_cast<int>(mpCurrFrame->mvpMapPoints.size()) != N)
                 mpCurrFrame->mvpMapPoints.resize(N, nullptr);

@@ -97,7 +97,8 @@ Eigen::Matrix4d Tracker::GrabImageStereo(const double timestamp, const cv::Mat &
         for (int i = 0; i < N; ++i)
         {
             auto pMP = mpCurrFrame->mvpMapPoints[i];
-            if (pMP && !pMP->isBad())
+            if (pMP && !pMP->isBad() && pMP->GetType() == MapPoint::NEAR)
+            // if (pMP && !pMP->isBad())
             {
                 cv::Mat pos = pMP->GetMapPoints();
                 pts3d.push_back(cv::Point3f(pos.at<float>(0), pos.at<float>(1), pos.at<float>(2)));
@@ -115,7 +116,7 @@ Eigen::Matrix4d Tracker::GrabImageStereo(const double timestamp, const cv::Mat &
             cv::solvePnPRansac(pts3d, pts2d, K, cv::Mat(), rvec, tvec,
                                false,       // useExtrinsicGuess
                                300,         // iterationsCount (ORB-SLAM2 最大迭代次数)
-                               sqrt(5.991), // reprojectionError (像素阈值 ≈ 2.45)
+                               1, // reprojectionError (像素阈值 ≈ 2.45)
                                0.99,        // confidence (ORB-SLAM2 置信度)
                                inliers,
                                cv::SOLVEPNP_EPNP // 推荐使用 EPnP，与 ORB-SLAM2 一致
@@ -145,25 +146,47 @@ Eigen::Matrix4d Tracker::GrabImageStereo(const double timestamp, const cv::Mat &
                 nNear++;
             }
         }
-        // 判断是否需要新的关键帧
+        // 判断是否需要新的关键帧：以像素视差（Parallax）阈值 1.0 像素进行判断
         bool bNeedNewKF = false;
-        // 条件1：距离上次关键帧超过20帧
-        // 条件2：近点数少于30且距离上次关键帧至少5帧（防止过于频繁）
-        if (mNumFramesSinceLastKeyFrame >= 20 ||
-            (nNear < 30 && mNumFramesSinceLastKeyFrame >= 5))
+
+        if (mpLastKeyFrame)
         {
-            bNeedNewKF = true;
-        }
-        else
-        {
-            // 原有条件：特征点数量比例下降
-            int nCurr = mpCurrFrame->mvleftpixel.size();
-            int nRef = mpLastKeyFrame ? mpLastKeyFrame->mvleftpixel.size() : 0;
-            double ratio = (nRef > 0) ? (double)nCurr / nRef : 0.0;
-            if (ratio < 0.8)
+            double totalParallax = 0.0;
+            int trackedCount = 0;
+
+            // 遍历当前帧特征点，寻找与上一关键帧同名特征点的像素位移（视差）
+            for (size_t i = 0; i < mpCurrFrame->mvleftpixel.size(); ++i)
+            {
+                // 若该特征点关联了有效的地图点，且该地图点也被上一关键帧观测到
+                auto pMP = mpCurrFrame->mvpMapPoints[i];
+                if (pMP && !pMP->isBad())
+                {
+                    auto obs = pMP->GetObservations();
+                    if (obs.count(mpLastKeyFrame))
+                    {
+                        size_t prevIdx = obs[mpLastKeyFrame];
+                        cv::Point2f ptCurr = mpCurrFrame->mvleftpixel[i].pt;
+                        // 注意修正此处的变量名：从 mvKeysLeft 改为 mvleftpixel
+                        cv::Point2f ptPrev = mpLastKeyFrame->mvleftpixel[prevIdx].pt;
+
+                        // 计算前后两帧像素坐标之间的欧氏距离（视差）
+                        double parallax = cv::norm(ptCurr - ptPrev);
+                        totalParallax += parallax;
+                        trackedCount++;
+                    }
+                }
+            }
+
+            // 计算平均视差
+            double avgParallax = (trackedCount > 0) ? (totalParallax / trackedCount) : 0.0;
+            if (avgParallax >= 1.0 || trackedCount < 20)
             {
                 bNeedNewKF = true;
             }
+        }
+        else
+        {
+            bNeedNewKF = true;
         }
         // 如果是关键帧，则生成新的地图点
         if (bNeedNewKF)

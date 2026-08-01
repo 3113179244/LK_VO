@@ -2,7 +2,7 @@
 #include "Frame.h"
 #include "MapPoint.h"
 #include <algorithm>
-
+#include "ORBextractor.h"
 long unsigned int KeyFrame::nNextId = 0;
 
 // 从 Frame 拷贝并生成 KeyFrame

@@ -73,6 +73,12 @@ public:
     // 状态与图标记
     bool mbBad; // 标记是否被冗余删除剔除
 
+    int mnScaleLevels;
+    float mfScaleFactor;
+    std::vector<float> mvScaleFactors;
+    std::vector<float> mvLevelSigma2;
+    std::vector<float> mvInvLevelSigma2;
+
 protected:
     // ---- 线程安全的数据保护 ----
     std::mutex mMutexPose;

@@ -87,7 +87,7 @@ bool Config::setParameterFile(const std::string &strConfigFile)
     g_nORBminThFAST    = get<int>("ORBextractor.minThFAST");
 
     // 3. 读取 Viewer Parameters（做非空判断，避免配置文件未定义时出错）
-    if (!g_fileConfig["Viewer.KeyFrameSize"].isEmpty())
+    if (!g_fileConfig["Viewer.KeyFrameSize"].empty())
     {
         g_dViewerKeyFrameSize      = get<double>("Viewer.KeyFrameSize");
         g_dViewerKeyFrameLineWidth = get<double>("Viewer.KeyFrameLineWidth");

@@ -52,11 +52,11 @@ target_link_libraries(${PROJECT_NAME}_lib
   pthread
 )
 
-add_executable(LK_VO src/main.cpp)
+add_executable(Stereo_ORB_VO src/main.cpp)
 
-target_link_libraries(LK_VO ${PROJECT_NAME}_lib)
+target_link_libraries(Stereo_ORB_VO ${PROJECT_NAME}_lib)
 
-install(TARGETS ${PROJECT_NAME}_lib LK_VO
+install(TARGETS ${PROJECT_NAME}_lib Stereo_ORB_VO
   ARCHIVE DESTINATION lib
   LIBRARY DESTINATION lib
   RUNTIME DESTINATION bin

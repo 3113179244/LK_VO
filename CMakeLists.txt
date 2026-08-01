@@ -30,7 +30,8 @@ include_directories(
 add_library(${PROJECT_NAME}_lib
   src/Camera.cpp
   src/Config.cpp
-  src/FeatureDetector.cpp
+  src/ORBmatcher.cpp
+  src/ORBextractor.cpp
   src/Frame.cpp
   src/KeyFrame.cpp
   src/Map.cpp

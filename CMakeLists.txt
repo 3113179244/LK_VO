@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.8)
-project(LK_VO)
+project(Stereo_ORB_VO)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)

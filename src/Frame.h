@@ -1,49 +1,95 @@
 #ifndef FRAME_H
 #define FRAME_H
 
+#include <vector>
+#include <thread>
 #include <opencv2/opencv.hpp>
 #include <Eigen/Core>
-#include <Eigen/Dense>
-#include <vector>
-#include <memory>
-#include <mutex>
+#include <Eigen/Geometry>
 
-// 前向声明
-class Camera;
 class MapPoint;
-class FeatureDetector;
+class ORBextractor;
+class ORBVocabulary;
+
+#define FRAME_GRID_ROWS 48
+#define FRAME_GRID_COLS 64
 
 class Frame
 {
 public:
-    typedef std::shared_ptr<Frame> Ptr;
+    Frame();
 
-    Frame(const double dtimestamp, const cv::Mat &image0, const cv::Mat &image1, const int FrameId);
+    Frame(const cv::Mat &imLeft, const cv::Mat &imRight, const double &timeStamp, 
+          ORBextractor* extractorLeft, ORBextractor* extractorRight, 
+          ORBVocabulary* voc, cv::Mat &K, cv::Mat &distCoef, const float &bf, const float &thDepth);
 
+    void ExtractORB(int flag, const cv::Mat &im);
+
+    // 设置相机位姿 (使用 Eigen)
     void SetPose(const Eigen::Matrix4f &Tcw);
-    Eigen::Matrix4f GetPose();
-    Eigen::Vector3f GetCameraCenter();
 
-    bool isInFrustum(const MapPoint *pMapPoint, float viewingCosLimit);
+    // 从相机位姿更新内部变换矩阵
+    void UpdatePoseMatrices();
 
-    unsigned long int mFrameId; // 帧图像的全局唯一身份证号
+    // 获取相机光心在世界坐标系下的位置
+    inline Eigen::Vector3f GetCameraCenter() { return mOw; }
+
+    // 获取相机旋转矩阵的逆 (相机到世界)
+    inline Eigen::Matrix3f GetRotationInverse() { return mRwc; }
+
+    // 将带有深度信息的双目特征点反投影为 3D 世界坐标
+    Eigen::Vector3f UnprojectStereo(const int &i);
+
+    std::vector<size_t> GetFeaturesInArea(const float &x, const float &y, const float &r, 
+                                          const int minLevel = -1, const int maxLevel = -1) const;
+
+public:
+    static long unsigned int nNextId;
+    long unsigned int mnId;
     double mTimeStamp;
-    int iFeaturePointnums; // 当前帧的特征点数量
-    std::vector<int> mvFeatureIds;//特征点的ID
-    std::vector<cv::KeyPoint> mvleftpixel;               // 第 i 个 2D 像素点
-    std::vector<cv::KeyPoint> mvrightpixel;              // 第 i 个 2D 像素点
-    std::vector<int> mvTrackCnt;                         // 特征点被连续追踪的次数
-    std::vector<float> mvInverseDepth;                   // 第 i 个点的逆深度
-    std::vector<std::shared_ptr<MapPoint>> mvpMapPoints; // 第 i 个点对应的 3D 地图点
-    std::vector<bool> mvbOutlier;                        // 误匹配/坏点标记列表
+
+    cv::Mat mK;
+    static float fx, fy, cx, cy, invfx, invfy;
+    cv::Mat mDistCoef;
+    float mbf;
+    float mb;
+    float mThDepth;
+
+    int N;
+    std::vector<cv::KeyPoint> mvKeys, mvKeysRight, mvKeysUn;
+    cv::Mat mDescriptors, mDescriptorsRight;
+    
+    std::vector<float> mvuRight;
+    std::vector<float> mvDepth;
+
+    std::vector<MapPoint*> mvpMapPoints;
+    std::vector<bool> mvbOutlier;
+
+    // ---- 相机位姿 (Eigen) ----
+    Eigen::Matrix4f mTcw;
+
+    static float mfGridElementWidthInv;
+    static float mfGridElementHeightInv;
+    static float mnMinX, mnMaxX, mnMinY, mnMaxY;
+    std::vector<std::size_t> mGrid[FRAME_GRID_COLS][FRAME_GRID_ROWS];
+
+    ORBextractor* mpORBextractorLeft;
+    ORBextractor* mpORBextractorRight;
+    ORBVocabulary* mpORBvocabulary;
+
+    static bool mbInitialComputations;
 
 private:
-    Eigen::Matrix4f mTcw; // 世界坐标系到当前相机坐标系的旋转平移矩阵
-    Eigen::Matrix3f mRcw; // 世界坐标系到当前相机坐标系的旋转矩阵
-    Eigen::Vector3f mtcw; // 世界坐标系到当前相机坐标系的平移向量
-    Eigen::Matrix3f mRwc; // 相机坐标系到世界坐标系的旋转矩阵
-    Eigen::Vector3f mOw;  // 相机光心在世界坐标系下的3D物理坐标。
-    std::mutex mMutexPose;
+    void ComputeStereoMatches();
+    void ComputeImageBounds(const cv::Mat &imLeft);
+    void AssignFeaturesToGrid();
+    bool PosInGrid(const cv::KeyPoint &kp, int &posX, int &posY);
+
+    // 位姿内部矩阵 (Eigen)
+    Eigen::Matrix3f mRcw;
+    Eigen::Vector3f mtcw;
+    Eigen::Matrix3f mRwc;
+    Eigen::Vector3f mOw;
 };
 
 #endif // FRAME_H

@@ -1,60 +1,61 @@
 #include "Map.h"
-#include "Frame.h"
+#include "KeyFrame.h"
 #include "MapPoint.h"
 
-void Map::InsertKeyFrame(std::shared_ptr<Frame> frame)
+Map::Map() {}
+
+void Map::AddKeyFrame(KeyFrame* pKF)
 {
     std::unique_lock<std::mutex> lock(mMutexMap);
-    mKeyFrames[frame->mFrameId] = frame;
+    mspKeyFrames.insert(pKF);
 }
 
-void Map::InsertMapPoint(std::shared_ptr<MapPoint> map_point)
+void Map::AddMapPoint(MapPoint* pMP)
 {
     std::unique_lock<std::mutex> lock(mMutexMap);
-    mMapPoints[map_point->mId] = map_point;
+    mspMapPoints.insert(pMP);
 }
 
-void Map::EraseMapPoint(std::shared_ptr<MapPoint> map_point)
+void Map::EraseMapPoint(MapPoint* pMP)
 {
     std::unique_lock<std::mutex> lock(mMutexMap);
-    mMapPoints.erase(map_point->mId);
-    map_point->SetBadFlag();
+    mspMapPoints.erase(pMP);
 }
 
-void Map::EraseKeyFrame(unsigned long id)
+void Map::EraseKeyFrame(KeyFrame* pKF)
 {
     std::unique_lock<std::mutex> lock(mMutexMap);
-    mKeyFrames.erase(id);
+    mspKeyFrames.erase(pKF);
 }
 
-std::vector<std::shared_ptr<Frame>> Map::GetAllKeyFrames()
+std::vector<KeyFrame*> Map::GetAllKeyFrames()
 {
     std::unique_lock<std::mutex> lock(mMutexMap);
-    std::vector<std::shared_ptr<Frame>> res;
-    res.reserve(mKeyFrames.size());
-    for (auto &kf : mKeyFrames)
-        res.push_back(kf.second);
-    return res;
+    return std::vector<KeyFrame*>(mspKeyFrames.begin(), mspKeyFrames.end());
 }
 
-std::vector<std::shared_ptr<MapPoint>> Map::GetAllMapPoints()
+std::vector<MapPoint*> Map::GetAllMapPoints()
 {
     std::unique_lock<std::mutex> lock(mMutexMap);
-    std::vector<std::shared_ptr<MapPoint>> res;
-    res.reserve(mMapPoints.size());
-    for (auto &mp : mMapPoints)
-        res.push_back(mp.second);
-    return res;
+    return std::vector<MapPoint*>(mspMapPoints.begin(), mspMapPoints.end());
 }
 
-int Map::GetKeyFramesInMap()
+long unsigned int Map::GetMapPointsInMap()
 {
     std::unique_lock<std::mutex> lock(mMutexMap);
-    return mKeyFrames.size();
+    return mspMapPoints.size();
 }
 
-int Map::GetMapPointsInMap()
+long unsigned int Map::GetKeyFramesInMap()
 {
     std::unique_lock<std::mutex> lock(mMutexMap);
-    return mMapPoints.size();
+    return mspKeyFrames.size();
+}
+
+void Map::Clear()
+{
+    std::unique_lock<std::mutex> lock(mMutexMap);
+    mspMapPoints.clear();
+    mspKeyFrames.clear();
+    mvpReferenceMapPoints.clear();
 }

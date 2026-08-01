@@ -1,99 +1,106 @@
 #include "Camera.h"
 
-Camera::Camera()
-    : fx(Config::g_dFx0),
-      fy(Config::g_dFy0),
-      cx(Config::g_dCx0),
-      cy(Config::g_dCy0),
-      k1(Config::g_dK1_0),
-      k2(Config::g_dK2_0),
-      p1(Config::g_dP1_0),
-      p2(Config::g_dP2_0),
-      k3(0.0),
-      mBaseline((Config::g_mBodyTCam0.inverse() * Config::g_mBodyTCam1).block<3, 1>(0, 3).norm())
-{
-    K << fx, 0, cx,
-         0, fy, cy,
-         0, 0, 1;
+Camera::Camera() {}
 
-    K_inv = K.inverse();
+Camera::Camera(double fx, double fy, double cx, double cy,
+               double k1, double k2, double p1, double p2,
+               double width, double height, double fps,
+               double bf, double thDepth)
+    : fx_(fx), fy_(fy), cx_(cx), cy_(cy),
+      k1_(k1), k2_(k2), p1_(p1), p2_(p2),
+      width_(width), height_(height), fps_(fps),
+      bf_(bf), thDepth_(thDepth) 
+{
+    // 根据 bf 和 fx 自动计算基线长度 baseline b (单位: m)
+    if (fx_ > 0.0) {
+        b_ = bf_ / fx_;
+    }
 }
 
-Eigen::Vector2d Camera::Camera2Pixel(const Eigen::Vector3d &P_c)
-{
+Eigen::Matrix3d Camera::K() const {
+    Eigen::Matrix3d K;
+    K << fx_,  0.0, cx_,
+         0.0, fy_,  cy_,
+         0.0,  0.0, 1.0;
+    return K;
+}
+
+cv::Mat Camera::K_cv() const {
+    return (cv::Mat_<double>(3, 3) << fx_, 0.0, cx_, 0.0, fy_, cy_, 0.0, 0.0, 1.0);
+}
+
+cv::Mat Camera::D_cv() const {
+    return (cv::Mat_<double>(4, 1) << k1_, k2_, p1_, p2_);
+}
+
+Eigen::Vector2d Camera::pixel2norm(const Eigen::Vector2d& p_p) const {
     return Eigen::Vector2d(
-        fx * P_c.x() / P_c.z() + cx,
-        fy * P_c.y() / P_c.z() + cy);
+        (p_p.x() - cx_) / fx_,
+        (p_p.y() - cy_) / fy_
+    );
 }
 
-Eigen::Vector3d Camera::Pixel2Camera(const Eigen::Vector2d &p_p)
-{
+cv::Point2f Camera::pixel2norm(const cv::Point2f& p_p) const {
+    return cv::Point2f(
+        static_cast<float>((p_p.x - cx_) / fx_),
+        static_cast<float>((p_p.y - cy_) / fy_)
+    );
+}
+
+Eigen::Vector2d Camera::norm2pixel(const Eigen::Vector2d& p_n) const {
+    return Eigen::Vector2d(
+        p_n.x() * fx_ + cx_,
+        p_n.y() * fy_ + cy_
+    );
+}
+
+cv::Point2f Camera::norm2pixel(const cv::Point2f& p_n) const {
+    return cv::Point2f(
+        static_cast<float>(p_n.x * fx_ + cx_),
+        static_cast<float>(p_n.y * fy_ + cy_)
+    );
+}
+
+Eigen::Vector2d Camera::camera2pixel(const Eigen::Vector3d& p_c) const {
+    return Eigen::Vector2d(
+        fx_ * p_c.x() / p_c.z() + cx_,
+        fy_ * p_c.y() / p_c.z() + cy_
+    );
+}
+
+Eigen::Vector3d Camera::pixel2camera(const Eigen::Vector2d& p_p, double depth) const {
     return Eigen::Vector3d(
-        (p_p.x() - cx) / fx,
-        (p_p.y() - cy) / fy,
-        1.0);
+        (p_p.x() - cx_) * depth / fx_,
+        (p_p.y() - cy_) * depth / fy_,
+        depth
+    );
 }
 
-Eigen::Vector3d Camera::World2Camera(const Eigen::Vector3d &P_w, const Eigen::Matrix4d &T_cw)
-{
-    Eigen::Vector4d P_w_homo(P_w.x(), P_w.y(), P_w.z(), 1.0);
-    Eigen::Vector4d P_c_homo = T_cw * P_w_homo;
-    return P_c_homo.head<3>();
+bool Camera::isInFrustum(const Eigen::Vector3d& p_c, double margin) const {
+    // 深度必须大于 0
+    if (p_c.z() <= 0.0) return false;
+
+    // 投影到像素坐标
+    Eigen::Vector2d p_p = camera2pixel(p_c);
+
+    // 检查是否在图像边界内（考虑边界 margin）
+    return (p_p.x() >= margin && p_p.x() < (width_ - margin) &&
+            p_p.y() >= margin && p_p.y() < (height_ - margin));
 }
 
-Eigen::Vector3d Camera::Camera2World(const Eigen::Vector3d &P_c, const Eigen::Matrix4d &T_wc)
-{
-    Eigen::Vector4d P_c_homo(P_c.x(), P_c.y(), P_c.z(), 1.0);
-    Eigen::Vector4d P_w_homo = T_wc * P_c_homo;
-    return P_w_homo.head<3>();
-}
+Eigen::Vector2d Camera::undistortPoint(const Eigen::Vector2d& p_p) const {
+    // 如果没有畸变参数，直接返回
+    if (k1_ == 0.0 && k2_ == 0.0 && p1_ == 0.0 && p2_ == 0.0) {
+        return p_p;
+    }
 
-Eigen::Vector2d Camera::UndistortPoint(const Eigen::Vector2d &p_p)
-{
-    cv::Mat cv_K = (cv::Mat_<double>(3, 3) << fx, 0, cx, 0, fy, cy, 0, 0, 1);
-    cv::Mat cv_D = (cv::Mat_<double>(5, 1) << k1, k2, p1, p2, k3);
+    cv::Mat mat(1, 2, CV_32F);
+    mat.at<float>(0, 0) = static_cast<float>(p_p.x());
+    mat.at<float>(0, 1) = static_cast<float>(p_p.y());
 
-    cv::Mat mat_p(1, 1, CV_64FC2);
-    mat_p.at<cv::Vec2d>(0, 0) = cv::Vec2d(p_p.x(), p_p.y());
+    mat = mat.reshape(2);
+    cv::undistortPoints(mat, mat, K_cv(), D_cv(), cv::Mat(), K_cv());
+    mat = mat.reshape(1);
 
-    cv::Mat undistorted;
-    cv::undistortPoints(mat_p, undistorted, cv_K, cv_D, cv::Mat(), cv_K);
-
-    cv::Vec2d res = undistorted.at<cv::Vec2d>(0, 0);
-    return Eigen::Vector2d(res[0], res[1]);
-}
-
-bool Camera::TriangulateDLT(const Eigen::Matrix4d &T_cw1, const Eigen::Matrix4d &T_cw2,
-                            const Eigen::Vector2d &pt1_norm, const Eigen::Vector2d &pt2_norm,
-                            Eigen::Vector3d &P_w)
-{
-    // 归一化坐标下，投影矩阵直接取 T_cw 的前 3x4 块 [R | t]
-    Eigen::Matrix<double, 3, 4> P1 = T_cw1.block<3, 4>(0, 0);
-    Eigen::Matrix<double, 3, 4> P2 = T_cw2.block<3, 4>(0, 0);
-
-    Eigen::Vector4d p1_1 = P1.row(0), p1_2 = P1.row(1), p1_3 = P1.row(2);
-    Eigen::Vector4d p2_1 = P2.row(0), p2_2 = P2.row(1), p2_3 = P2.row(2);
-
-    // 构建方程组 A * X = 0
-    Eigen::Matrix4d A;
-    A.row(0) = pt1_norm.x() * p1_3 - p1_1;
-    A.row(1) = pt1_norm.y() * p1_3 - p1_2;
-    A.row(2) = pt2_norm.x() * p2_3 - p2_1;
-    A.row(3) = pt2_norm.y() * p2_3 - p2_2;
-
-    // SVD 求解
-    Eigen::JacobiSVD<Eigen::Matrix4d> svd(A, Eigen::ComputeFullV);
-    Eigen::Vector4d X_homo = svd.matrixV().col(3);
-
-    if (std::abs(X_homo.w()) < 1e-6)
-        return false;
-
-    // 齐次坐标归一化
-    P_w = X_homo.head<3>() / X_homo.w();
-
-    // 正深度检查 (Check Positive Depth)
-    Eigen::Vector3d P_c1 = T_cw1.block<3, 3>(0, 0) * P_w + T_cw1.block<3, 1>(0, 3);
-    Eigen::Vector3d P_c2 = T_cw2.block<3, 3>(0, 0) * P_w + T_cw2.block<3, 1>(0, 3);
-
-    return (P_c1.z() > 0.0 && P_c2.z() > 0.0);
+    return Eigen::Vector2d(mat.at<float>(0, 0), mat.at<float>(0, 1));
 }

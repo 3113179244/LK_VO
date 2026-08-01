@@ -1,96 +1,81 @@
 #ifndef MAPPOINT_H
 #define MAPPOINT_H
 
-#include <opencv2/opencv.hpp>
+#include <vector>
 #include <map>
-#include <memory>
 #include <mutex>
+#include <opencv2/opencv.hpp>
+#include <Eigen/Core>
 
-// 前向声明，避免循环包含
+class KeyFrame;
 class Frame;
+class Map;
 
-/**
- * @brief 地图点类，表示SLAM系统中的3D地图点
- *
- * 存储三维世界坐标，并维护所有观测到该点的关键帧及对应特征索引，
- * 同时提供线程安全的访问接口。
- */
 class MapPoint
 {
 public:
-    typedef std::shared_ptr<MapPoint> Ptr; // 智能指针类型别名
-    enum PointType
-    {
-        NEAR = 0,
-        FAR = 1
-    };
-    /**
-     * @brief 构造函数
-     * @param id     地图点唯一ID
-     * @param points 三维坐标（通常为3x1的CV_32F矩阵）
-     */
-    MapPoint(const long unsigned int id, const cv::Mat &points, PointType type = NEAR);
-    PointType GetType();
-    void SetType(PointType type);
-    /**
-     * @brief 设置三维坐标（线程安全）
-     * @param points 新的坐标矩阵
-     */
-    void SetMapPoints(const cv::Mat &points);
+    // 从双目/深度 Frame 构造点
+    MapPoint(const Eigen::Vector3f &Pos, KeyFrame* pRefKF, Map* pMap);
+    // 从两个 KeyFrame 三角化构造点
+    MapPoint(const Eigen::Vector3f &Pos, Map* pMap, KeyFrame* pRefKF, const int &idxF);
 
-    /**
-     * @brief 获取三维坐标的副本（线程安全）
-     * @return 坐标矩阵的深拷贝
-     */
-    cv::Mat GetMapPoints();
+    // ---- 世界坐标管理 (线程安全) ----
+    void SetWorldPos(const Eigen::Vector3f &Pos);
+    Eigen::Vector3f GetWorldPos();
+    Eigen::Vector3f GetNormal(); // 获取平均观测方向
 
-    /**
-     * @brief 添加一个观测（某个关键帧在特定特征索引处观测到该点）
-     * @param pFrame 观测关键帧的智能指针
-     * @param idx    该帧中对应特征的索引
-     * @note 若该帧已存在则不会重复添加
-     */
-    void AddObservation(std::shared_ptr<Frame> pFrame, size_t idx);
+    // ---- 观测管理 (Observations) ----
+    void AddObservation(KeyFrame* pKF, size_t idx);
+    void EraseObservation(KeyFrame* pKF);
+    std::map<KeyFrame*, size_t> GetObservations();
+    int GetIndexInKeyFrame(KeyFrame* pKF);
+    bool IsInKeyFrame(KeyFrame* pKF);
 
-    /**
-     * @brief 移除一个观测
-     * @param pFrame 要移除的关键帧
-     */
-    void RemoveObservation(std::shared_ptr<Frame> pFrame);
+    // ---- ORB 特征属性维护 ----
+    void ComputeDistinctiveDescriptor(); // 计算代表性描述子
+    cv::Mat GetDescriptor();
+    void UpdateNormalAndDepth();         // 更新平均法线方向与深度范围
 
-    /**
-     * @brief 获取所有观测信息（线程安全）
-     * @return 映射：关键帧 -> 特征索引
-     */
-    std::map<std::shared_ptr<Frame>, size_t> GetObservations();
-
-    /**
-     * @brief 获取观测数量
-     * @return 观测帧的个数
-     */
-    int GetObservedCount();
-
-    /**
-     * @brief 将地图点标记为“坏点”（不再使用）
-     */
+    // ---- 状态与坏点剔除 (Bad Point Tracking) ----
     void SetBadFlag();
-
-    /**
-     * @brief 检查地图点是否被标记为坏点
-     * @return true 表示坏点
-     */
     bool isBad();
+    void Replace(MapPoint* pMP);         // 替换/融合地图点
 
-    const long unsigned int mId; ///< 地图点ID，只读（初始化后不可变）
+    // ---- 追踪过程统计 (用于局部地图过滤) ----
+    void IncreaseVisible(int n=1);
+    void IncreaseFound(int n=1);
+    float GetFoundRatio();
 
-private:
-    cv::Mat mMapPoints;                                     ///< 三维坐标（世界坐标系）
-    std::map<std::shared_ptr<Frame>, size_t> mObservations; ///< 观测信息
-    int mnObs;                                              ///< 观测数量（冗余变量，与mObservations.size()一致）
-    bool mbBad;                                             ///< 坏点标志
-    PointType mType;   // 远/近标志
-    std::mutex mMutexMapPoints; ///< 保护mMapPoints的互斥锁
-    std::mutex mMutexFeatures;  ///< 保护mObservations, mnObs, mbBad的互斥锁
+public:
+    static long unsigned int nNextId;
+    long unsigned int mnId;
+    static std::mutex mGlobalMutex;
+
+    // 统计变量 (用于Tracking与Local Mapping剔除坏点)
+    int mnVisible;
+    int mnFound;
+
+    // 标记与状态
+    bool mbBad;
+    MapPoint* mpReplaced;
+
+    // 视角与距离限制 (用于特征匹配与重投影)
+    float mfMinDistance;
+    float mfMaxDistance;
+
+protected:
+    // ---- 线程安全数据 ----
+    std::mutex mMutexPos;
+    std::mutex mMutexFeatures;
+
+    Eigen::Vector3f mWorldPos;           // 3D 位置 (World 坐标系)
+    std::map<KeyFrame*, size_t> mObservations; // 观测到该点的 KeyFrame 及对应的特征点 Index
+    Eigen::Vector3f mNormalVector;       // 平均观测方向（单位向量）
+    cv::Mat mDescriptor;                 // 代表性描述子 (最接近中位数的描述子)
+
+    // 引用关键帧与地图
+    KeyFrame* mpRefKF;
+    Map* mpMap;
 };
 
 #endif // MAPPOINT_H

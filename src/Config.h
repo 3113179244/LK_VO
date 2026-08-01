@@ -16,40 +16,42 @@ public:
     static cv::FileStorage g_fileConfig;
     static std::shared_ptr<Config> g_spConfig;
 
-    static int g_nImu;
-    static int g_nNumOfCam;
-    static std::string g_strImage0Topic;
-    static std::string g_strImage1Topic;
-    static std::string g_strOutputPath;
+    // 相机内参及畸变参数 (Camera.*)
+    static double g_dFx;
+    static double g_dFy;
+    static double g_dCx;
+    static double g_dCy;
+    static double g_dK1;
+    static double g_dK2;
+    static double g_dP1;
+    static double g_dP2;
 
+    // 相机基础设置
     static int g_nImageWidth;
     static int g_nImageHeight;
+    static double g_dFps;
+    static double g_dBf;       // baseline * fx
+    static int g_nRGB;         // 0: BGR, 1: RGB
+    static double g_dThDepth;  // 远近点阈值
 
-    static Eigen::Matrix4d g_mBodyTCam0;
-    static Eigen::Matrix4d g_mBodyTCam1;
+    // ORB 提取器参数
+    static int g_nORBnFeatures;
+    static double g_dORBscaleFactor;
+    static int g_nORBnLevels;
+    static int g_nORBiniThFAST;
+    static int g_nORBminThFAST;
 
-    static int g_nMaxCnt;
-    static int g_nMinDist;
-    static int g_nFreq;
-    static double g_dFThreshold;
-    static int g_nShowTrack;
-    static int g_nFlowBack;
-
-    static double g_dMaxSolverTime;
-    static int g_nMaxNumIterations;
-    static double g_dKeyframeParallax;
-
-    static double g_dAccN;
-    static double g_dGyrN;
-    static double g_dAccW;
-    static double g_dGyrW;
-    static double g_dGNorm;
-
-    static double g_dFx0, g_dFy0, g_dCx0, g_dCy0;
-    static double g_dK1_0, g_dK2_0, g_dP1_0, g_dP2_0;
-
-    static double g_dFx1, g_dFy1, g_dCx1, g_dCy1;
-    static double g_dK1_1, g_dK2_1, g_dP1_1, g_dP2_1;
+    // 可视化 Viewer 参数
+    static double g_dViewerKeyFrameSize;
+    static double g_dViewerKeyFrameLineWidth;
+    static double g_dViewerGraphLineWidth;
+    static double g_dViewerPointSize;
+    static double g_dViewerCameraSize;
+    static double g_dViewerCameraLineWidth;
+    static double g_dViewerPointX;
+    static double g_dViewerPointY;
+    static double g_dViewerPointZ;
+    static double g_dViewerPointF;
 
     static bool setParameterFile(const std::string &strConfigFile);
 
@@ -58,12 +60,6 @@ public:
     {
         return T(Config::g_fileConfig[strKey]);
     }
-
-private:
-    static bool readCameraConfig(const std::string &strCamConfigFile,
-                                 double &dFx, double &dFy, double &dCx, double &dCy,
-                                 double &dK1, double &dK2, double &dP1, double &dP2);
-    static Eigen::Matrix4d cvMat2Eigen(const cv::Mat &matCv);
 };
 
 #endif

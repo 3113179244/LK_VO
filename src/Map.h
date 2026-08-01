@@ -1,33 +1,41 @@
 #ifndef MAP_H
 #define MAP_H
 
-#include <memory>
+#include <set>
 #include <vector>
-#include <map>
 #include <mutex>
 
-class Frame;
+class KeyFrame;
 class MapPoint;
 
-class Map {
+class Map
+{
 public:
-    typedef std::shared_ptr<Map> Ptr;
-    Map() {}
-    ~Map() = default;
+    Map();
 
-    void InsertKeyFrame(std::shared_ptr<Frame> frame);
-    void InsertMapPoint(std::shared_ptr<MapPoint> map_point);
-    void EraseMapPoint(std::shared_ptr<MapPoint> map_point);
-    void EraseKeyFrame(unsigned long id); 
-    std::vector<std::shared_ptr<Frame>> GetAllKeyFrames();
-    std::vector<std::shared_ptr<MapPoint>> GetAllMapPoints();
-    int GetKeyFramesInMap();
-    int GetMapPointsInMap();
+    // ---- 关键帧与地图点管理 ----
+    void AddKeyFrame(KeyFrame* pKF);
+    void AddMapPoint(MapPoint* pMP);
+    void EraseMapPoint(MapPoint* pMP);
+    void EraseKeyFrame(KeyFrame* pKF);
 
-private:
+    // ---- 获取全局数据副本 (用于 Visualization / Loop Closing) ----
+    std::vector<KeyFrame*> GetAllKeyFrames();
+    std::vector<MapPoint*> GetAllMapPoints();
+    std::vector<MapPoint*> GetReferenceMapPoints();
+
+    long unsigned int GetMapPointsInMap();
+    long unsigned int GetKeyFramesInMap();
+
+    void Clear();
+
+protected:
+    std::set<MapPoint*> mspMapPoints;
+    std::set<KeyFrame*> mspKeyFrames;
+
+    std::vector<MapPoint*> mvpReferenceMapPoints;
+
     std::mutex mMutexMap;
-    std::map<unsigned long, std::shared_ptr<Frame>> mKeyFrames;
-    std::map<unsigned long, std::shared_ptr<MapPoint>> mMapPoints;
 };
 
-#endif
+#endif // MAP_H

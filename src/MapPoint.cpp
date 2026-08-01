@@ -1,121 +1,244 @@
 #include "MapPoint.h"
-#include "Frame.h"
+#include "KeyFrame.h"
+#include "Map.h"
 
-/**
- * @brief 构造函数实现
- * @param id     地图点ID
- * @param points 初始三维坐标
- *
- * 初始化坐标（克隆一份独立数据），观测计数为0，坏点标志为false。
- */
-MapPoint::MapPoint(const long unsigned int id, const cv::Mat &points, PointType type)
-    : mId(id), mMapPoints(points.clone()), mnObs(0), mbBad(false), mType(type) {}
+long unsigned int MapPoint::nNextId = 0;
+std::mutex MapPoint::mGlobalMutex;
 
-/**
- * @brief 线程安全地更新三维坐标
- * @param points 新坐标
- *
- * 使用互斥锁保护，并复制数据到内部矩阵。
- */
-void MapPoint::SetMapPoints(const cv::Mat &points)
+MapPoint::MapPoint(const Eigen::Vector3f &Pos, KeyFrame* pRefKF, Map* pMap)
+    : mWorldPos(Pos), mpRefKF(pRefKF), mpMap(pMap), mnVisible(1), mnFound(1), mbBad(false), mpReplaced(nullptr)
 {
-    std::unique_lock<std::mutex> lock(mMutexMapPoints);
-    points.copyTo(mMapPoints);
+    mnId = nNextId++;
+    mNormalVector.setZero();
 }
 
-/**
- * @brief 线程安全地获取三维坐标
- * @return 坐标矩阵的深拷贝，确保外部修改不影响内部数据
- */
-cv::Mat MapPoint::GetMapPoints()
+void MapPoint::SetWorldPos(const Eigen::Vector3f &Pos)
 {
-    std::unique_lock<std::mutex> lock(mMutexMapPoints);
-    return mMapPoints.clone();
+    std::unique_lock<std::mutex> lock(mMutexPos);
+    mWorldPos = Pos;
 }
 
-/**
- * @brief 添加观测关系
- * @param pFrame 观测关键帧
- * @param idx    特征索引
- *
- * 若该帧已存在于观测列表中，则忽略；否则插入并增加计数。
- * 操作受互斥锁保护，确保线程安全。
- */
-void MapPoint::AddObservation(std::shared_ptr<Frame> pFrame, size_t idx)
+Eigen::Vector3f MapPoint::GetWorldPos()
+{
+    std::unique_lock<std::mutex> lock(mMutexPos);
+    return mWorldPos;
+}
+
+Eigen::Vector3f MapPoint::GetNormal()
+{
+    std::unique_lock<std::mutex> lock(mMutexPos);
+    return mNormalVector;
+}
+
+void MapPoint::AddObservation(KeyFrame* pKF, size_t idx)
 {
     std::unique_lock<std::mutex> lock(mMutexFeatures);
-    if (mObservations.count(pFrame))
-        return; // 已存在，不重复添加
-    mObservations[pFrame] = idx;
-    mnObs++;
+    if(mObservations.count(pKF))
+        return;
+    mObservations[pKF] = idx;
 }
 
-/**
- * @brief 移除一个观测
- * @param pFrame 要移除的关键帧
- *
- * 若该帧存在，则从映射中删除并减少计数。
- */
-void MapPoint::RemoveObservation(std::shared_ptr<Frame> pFrame)
+void MapPoint::EraseObservation(KeyFrame* pKF)
 {
-    std::unique_lock<std::mutex> lock(mMutexFeatures);
-    if (mObservations.count(pFrame))
+    bool bBad = false;
     {
-        mObservations.erase(pFrame);
-        mnObs--;
+        std::unique_lock<std::mutex> lock(mMutexFeatures);
+        if(mObservations.count(pKF))
+        {
+            mObservations.erase(pKF);
+            if(mpRefKF == pKF)
+                mpRefKF = mObservations.begin()->first;
+
+            // 当观测到该点的关键帧少于 2 个时，标记为坏点
+            if(mObservations.size() <= 1)
+                bBad = true;
+        }
+    }
+
+    if(bBad)
+        SetBadFlag();
+}
+
+std::map<KeyFrame*, size_t> MapPoint::GetObservations()
+{
+    std::unique_lock<std::mutex> lock(mMutexFeatures);
+    return mObservations;
+}
+
+// 计算代表性描述子：找到与其他所有观测描述子汉明距离中位数最小的那个描述子
+void MapPoint::ComputeDistinctiveDescriptor()
+{
+    std::vector<cv::Mat> vDescriptors;
+    std::map<KeyFrame*, size_t> observations;
+
+    {
+        std::unique_lock<std::mutex> lock(mMutexFeatures);
+        if(mbBad) return;
+        observations = mObservations;
+    }
+
+    if(observations.empty()) return;
+
+    vDescriptors.reserve(observations.size());
+
+    for(auto mit = observations.begin(); mit != observations.end(); mit++)
+    {
+        KeyFrame* pKF = mit->first;
+        if(!pKF->mbBad)
+            vDescriptors.push_back(pKF->mDescriptors.row(mit->second));
+    }
+
+    if(vDescriptors.empty()) return;
+
+    // 算两两之间的距离矩阵
+    const size_t N = vDescriptors.size();
+    float Distances[N][N];
+    for(size_t i = 0; i < N; i++)
+    {
+        Distances[i][i] = 0;
+        for(size_t j = i + 1; j < N; j++)
+        {
+            int dist = cv::norm(vDescriptors[i], vDescriptors[j], cv::NORM_HAMMING);
+            Distances[i][j] = dist;
+            Distances[j][i] = dist;
+        }
+    }
+
+    int BestMedian = INT_MAX;
+    int BestIdx = 0;
+    for(size_t i = 0; i < N; i++)
+    {
+        std::vector<int> vDists(Distances[i], Distances[i] + N);
+        std::sort(vDists.begin(), vDists.end());
+        int median = vDists[0.5 * (N - 1)];
+
+        if(median < BestMedian)
+        {
+            BestMedian = median;
+            BestIdx = i;
+        }
+    }
+
+    {
+        std::unique_lock<std::mutex> lock(mMutexFeatures);
+        mDescriptor = vDescriptors[BestIdx].clone();
     }
 }
 
-/**
- * @brief 获取所有观测的副本
- * @return 包含所有观测的映射副本（线程安全）
- */
-std::map<std::shared_ptr<Frame>, size_t> MapPoint::GetObservations()
+cv::Mat MapPoint::GetDescriptor()
 {
     std::unique_lock<std::mutex> lock(mMutexFeatures);
-    return mObservations; // 返回拷贝，外部修改不影响内部
+    return mDescriptor.clone();
 }
 
-/**
- * @brief 获取观测数量
- * @return 观测帧个数
- */
-int MapPoint::GetObservedCount()
+// 更新平均观测方向向量与尺度（距离）下限/上限
+void MapPoint::UpdateNormalAndDepth()
 {
-    std::unique_lock<std::mutex> lock(mMutexFeatures);
-    return mnObs;
+    std::map<KeyFrame*, size_t> observations;
+    KeyFrame* pRefKF;
+    Eigen::Vector3f Pos;
+
+    {
+        std::unique_lock<std::mutex> lock1(mMutexFeatures);
+        std::unique_lock<std::mutex> lock2(mMutexPos);
+        if(mbBad) return;
+        observations = mObservations;
+        pRefKF = mpRefKF;
+        Pos = mWorldPos;
+    }
+
+    if(observations.empty()) return;
+
+    Eigen::Vector3f normal = Eigen::Vector3f::Zero();
+    int n=0;
+
+    for(auto mit = observations.begin(); mit != observations.end(); mit++)
+    {
+        KeyFrame* pKF = mit->first;
+        Eigen::Vector3f Owc = pKF->GetCameraCenter();
+        Eigen::Vector3f normali = Pos - Owc;
+        normal += normali.normalized();
+        n++;
+    }
+
+    Eigen::Vector3f Owc = pRefKF->GetCameraCenter();
+    Eigen::Vector3f dist = Pos - Owc;
+    const float distRef = dist.norm();
+
+    const int level = pRefKF->mvKeysUn[observations[pRefKF]].octave;
+    const float levelScaleFactor = pRefKF->mvScaleFactors[level];
+    const int nLevels = pRefKF->mnScaleLevels;
+
+    {
+        std::unique_lock<std::mutex> lock3(mMutexPos);
+        mfMinDistance = distRef / levelScaleFactor;
+        mfMaxDistance = mfMinDistance * pRefKF->mvScaleFactors[nLevels - 1];
+        mNormalVector = normal.normalized();
+    }
 }
 
-/**
- * @brief 将地图点标记为坏点
- *
- * 设置mbBad为true，后续可被地图清理线程删除。
- * 操作受互斥锁保护。
- */
 void MapPoint::SetBadFlag()
 {
-    std::unique_lock<std::mutex> lock(mMutexFeatures);
-    mbBad = true;
+    std::map<KeyFrame*, size_t> obs;
+    {
+        std::unique_lock<std::mutex> lock1(mMutexFeatures);
+        std::unique_lock<std::mutex> lock2(mMutexPos);
+        mbBad = true;
+        obs = mObservations;
+        mObservations.clear();
+    }
+    for(auto mit = obs.begin(); mit != obs.end(); mit++)
+    {
+        KeyFrame* pKF = mit->first;
+        pKF->EraseMapPointMatch(mit->second);
+    }
+
+    mpMap->EraseMapPoint(this);
 }
 
-/**
- * @brief 检查地图点是否为坏点
- * @return true 表示坏点
- */
 bool MapPoint::isBad()
 {
-    std::unique_lock<std::mutex> lock(mMutexFeatures);
+    std::unique_lock<std::mutex> lock1(mMutexFeatures);
+    std::unique_lock<std::mutex> lock2(mMutexPos);
     return mbBad;
 }
 
-MapPoint::PointType MapPoint::GetType() 
+void MapPoint::Replace(MapPoint* pMP)
 {
-    std::unique_lock<std::mutex> lock(mMutexFeatures);
-    return mType;
+    if(pMP->mnId == this->mnId) return;
+
+    std::map<KeyFrame*, size_t> obs;
+    {
+        std::unique_lock<std::mutex> lock1(mMutexFeatures);
+        std::unique_lock<std::mutex> lock2(mMutexPos);
+        obs = mObservations;
+        mObservations.clear();
+        mbBad = true;
+        mpReplaced = pMP;
+    }
+
+    for(auto mit = obs.begin(); mit != obs.end(); mit++)
+    {
+        KeyFrame* pKF = mit->first;
+        if(!pMP->IsInKeyFrame(pKF))
+        {
+            pKF->ReplaceMapPointMatch(mit->second, pMP);
+            pMP->AddObservation(pKF, mit->second);
+        }
+        else
+        {
+            pKF->EraseMapPointMatch(mit->second);
+        }
+    }
+
+    pMP->ComputeDistinctiveDescriptor();
+    pMP->UpdateNormalAndDepth();
+
+    mpMap->EraseMapPoint(this);
 }
 
-void MapPoint::SetType(PointType type)
+bool MapPoint::IsInKeyFrame(KeyFrame* pKF)
 {
     std::unique_lock<std::mutex> lock(mMutexFeatures);
-    mType = type;
+    return mObservations.count(pKF);
 }

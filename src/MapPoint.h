@@ -46,7 +46,6 @@ public:
     void IncreaseFound(int n=1);
     float GetFoundRatio();
 
-public:
     static long unsigned int nNextId;
     long unsigned int mnId;
     static std::mutex mGlobalMutex;
@@ -63,7 +62,7 @@ public:
     float mfMinDistance;
     float mfMaxDistance;
 
-protected:
+private:
     // ---- 线程安全数据 ----
     std::mutex mMutexPos;
     std::mutex mMutexFeatures;

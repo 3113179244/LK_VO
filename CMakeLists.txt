@@ -6,6 +6,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
 add_compile_options(-Wextra -Wpedantic -w)
+add_compile_options(-O3 -march=native)
 set(CMAKE_BUILD_TYPE Release)
 
 find_package(OpenCV REQUIRED)

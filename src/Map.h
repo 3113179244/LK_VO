@@ -29,7 +29,7 @@ public:
 
     void Clear();
 
-protected:
+private:
     std::set<MapPoint*> mspMapPoints;
     std::set<KeyFrame*> mspKeyFrames;
 

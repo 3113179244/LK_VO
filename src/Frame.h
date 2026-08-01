@@ -43,7 +43,6 @@ public:
     std::vector<size_t> GetFeaturesInArea(const float &x, const float &y, const float &r, 
                                           const int minLevel = -1, const int maxLevel = -1) const;
 
-public:
     static long unsigned int nNextId;
     long unsigned int mnId;
     double mTimeStamp;

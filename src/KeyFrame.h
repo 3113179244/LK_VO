@@ -50,7 +50,6 @@ public:
     // ---- 词袋与属性检索 ----
     void ComputeBoW();
 
-public:
     // 标识与时间戳
     static long unsigned int nNextId;
     long unsigned int mnId;
@@ -79,7 +78,7 @@ public:
     std::vector<float> mvLevelSigma2;
     std::vector<float> mvInvLevelSigma2;
 
-protected:
+private:
     // ---- 线程安全的数据保护 ----
     std::mutex mMutexPose;
     std::mutex mMutexConnections;

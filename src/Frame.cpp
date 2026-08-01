@@ -1,4 +1,6 @@
 #include "Frame.h"
+#include "ORBextractor.h"
+#include "ORBmatcher.h"
 #include <thread>
 #include <cmath>
 
@@ -66,8 +68,17 @@ Frame::Frame(const cv::Mat &imLeft, const cv::Mat &imRight, const double &timeSt
 
 void Frame::ExtractORB(int flag, const cv::Mat &im)
 {
-    // 实际项目中提取器需要重载 operator() 来输出特征点和描述子
-    // 如果 flag == 0 则处理左图，否则处理右图
+    if (flag == 0) {
+        // 左图：使用左目提取器，结果存入 mvKeys 和 mDescriptors
+        if (mpORBextractorLeft) {
+            (*mpORBextractorLeft)(im, cv::Mat(), mvKeys, mDescriptors);
+        }
+    } else {
+        // 右图：使用右目提取器，结果存入 mvKeysRight 和 mDescriptorsRight
+        if (mpORBextractorRight) {
+            (*mpORBextractorRight)(im, cv::Mat(), mvKeysRight, mDescriptorsRight);
+        }
+    }
 }
 
 void Frame::SetPose(const Eigen::Matrix4f &Tcw)

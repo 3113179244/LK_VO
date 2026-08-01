@@ -64,7 +64,6 @@ public:
     std::vector<MapPoint*> mvpMapPoints;
     std::vector<bool> mvbOutlier;
 
-    // ---- 相机位姿 (Eigen) ----
     Eigen::Matrix4f mTcw;
 
     static float mfGridElementWidthInv;
@@ -84,7 +83,6 @@ private:
     void AssignFeaturesToGrid();
     bool PosInGrid(const cv::KeyPoint &kp, int &posX, int &posY);
 
-    // 位姿内部矩阵 (Eigen)
     Eigen::Matrix3f mRcw;
     Eigen::Vector3f mtcw;
     Eigen::Matrix3f mRwc;

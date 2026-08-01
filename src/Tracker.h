@@ -1,0 +1,73 @@
+#ifndef TRACKER_H
+#define TRACKER_H
+
+#include <opencv2/opencv.hpp>
+#include <Eigen/Core>
+#include <memory>
+#include <vector>
+
+#include "Frame.h"
+#include "System.h"
+
+class Map;
+class Viewer;
+class ORBextractor;
+class KeyFrame;
+class Tracker
+{
+public:
+    enum eTrackingState {
+        SYSTEM_NOT_READY = -1,
+        NO_IMAGES_YET = 0,
+        NOT_INITIALIZED = 1,
+        OK = 2,
+        LOST = 3
+    };
+
+public:
+    Tracker(System* pSys, std::shared_ptr<Map> pMap, int sensor);
+    ~Tracker();
+
+    // 图像数据Grab接口
+    Eigen::Matrix4f GrabImageStereo(const cv::Mat &imRectLeft, const cv::Mat &imRectRight, const double &timestamp);
+
+    void SetViewer(std::shared_ptr<Viewer> pViewer) { mpViewer = pViewer; }
+    void Reset();
+
+    eTrackingState mState;
+
+private:
+    // ---- 跟踪主流程阶段 ----
+    void Track();
+    bool StereoInitialization();
+    bool TrackWithMotionModel();
+    bool TrackReferenceKeyFrame();
+    bool TrackLocalMap();
+
+    // ---- 关键帧决策机制 ----
+    bool NeedNewKeyFrame();
+    void CreateNewKeyFrame();
+
+private:
+    System* mpSystem;
+    std::shared_ptr<Map> mpMap;
+    std::shared_ptr<Viewer> mpViewer;
+
+    // 特征提取器指针 (双目需要左右各一个 extractor)
+    std::unique_ptr<ORBextractor> mpORBextractorLeft;
+    std::unique_ptr<ORBextractor> mpORBextractorRight;
+
+    // 当前帧与上一帧
+    Frame mCurrentFrame;
+    Frame mLastFrame;
+
+    // 恒速模型：相对位姿速度 Velocity (T_current_last = T_c_w * T_w_last)
+    Eigen::Matrix4f mVelocity;
+
+    // 计数器与关键帧参考
+    KeyFrame* mpReferenceKF;
+    int mnLastKeyFrameId;
+    int mnMatchesInliers;
+};
+
+#endif // TRACKER_H

@@ -61,44 +61,44 @@ bool Config::setParameterFile(const std::string &strConfigFile)
         return false;
     }
 
-    // 1. 读取 Camera Parameters
-    g_dFx = get<double>("Camera.fx");
-    g_dFy = get<double>("Camera.fy");
-    g_dCx = get<double>("Camera.cx");
-    g_dCy = get<double>("Camera.cy");
+    // 1. 读取 Camera Parameters (使用安全转换)
+    g_fileConfig["Camera.fx"] >> g_dFx;
+    g_fileConfig["Camera.fy"] >> g_dFy;
+    g_fileConfig["Camera.cx"] >> g_dCx;
+    g_fileConfig["Camera.cy"] >> g_dCy;
 
-    g_dK1 = get<double>("Camera.k1");
-    g_dK2 = get<double>("Camera.k2");
-    g_dP1 = get<double>("Camera.p1");
-    g_dP2 = get<double>("Camera.p2");
+    g_fileConfig["Camera.k1"] >> g_dK1;
+    g_fileConfig["Camera.k2"] >> g_dK2;
+    g_fileConfig["Camera.p1"] >> g_dP1;
+    g_fileConfig["Camera.p2"] >> g_dP2;
 
-    g_nImageWidth  = get<int>("Camera.width");
-    g_nImageHeight = get<int>("Camera.height");
-    g_dFps         = get<double>("Camera.fps");
-    g_dBf          = get<double>("Camera.bf");
-    g_nRGB         = get<int>("Camera.RGB");
-    g_dThDepth     = get<double>("ThDepth");
+    g_fileConfig["Camera.width"]  >> g_nImageWidth;
+    g_fileConfig["Camera.height"] >> g_nImageHeight;
+    g_fileConfig["Camera.fps"]    >> g_dFps;
+    g_fileConfig["Camera.bf"]     >> g_dBf;
+    g_fileConfig["Camera.RGB"]    >> g_nRGB;
+    g_fileConfig["ThDepth"]       >> g_dThDepth;
 
     // 2. 读取 ORB Parameters
-    g_nORBnFeatures    = get<int>("ORBextractor.nFeatures");
-    g_dORBscaleFactor  = get<double>("ORBextractor.scaleFactor");
-    g_nORBnLevels      = get<int>("ORBextractor.nLevels");
-    g_nORBiniThFAST    = get<int>("ORBextractor.iniThFAST");
-    g_nORBminThFAST    = get<int>("ORBextractor.minThFAST");
+    g_fileConfig["ORBextractor.nFeatures"]   >> g_nORBnFeatures;
+    g_fileConfig["ORBextractor.scaleFactor"] >> g_dORBscaleFactor;
+    g_fileConfig["ORBextractor.nLevels"]     >> g_nORBnLevels;
+    g_fileConfig["ORBextractor.iniThFAST"]   >> g_nORBiniThFAST;
+    g_fileConfig["ORBextractor.minThFAST"]   >> g_nORBminThFAST;
 
-    // 3. 读取 Viewer Parameters（做非空判断，避免配置文件未定义时出错）
+    // 3. 读取 Viewer Parameters
     if (!g_fileConfig["Viewer.KeyFrameSize"].empty())
     {
-        g_dViewerKeyFrameSize      = get<double>("Viewer.KeyFrameSize");
-        g_dViewerKeyFrameLineWidth = get<double>("Viewer.KeyFrameLineWidth");
-        g_dViewerGraphLineWidth    = get<double>("Viewer.GraphLineWidth");
-        g_dViewerPointSize         = get<double>("Viewer.PointSize");
-        g_dViewerCameraSize        = get<double>("Viewer.CameraSize");
-        g_dViewerCameraLineWidth   = get<double>("Viewer.CameraLineWidth");
-        g_dViewerPointX            = get<double>("Viewer.ViewpointX");
-        g_dViewerPointY            = get<double>("Viewer.ViewpointY");
-        g_dViewerPointZ            = get<double>("Viewer.ViewpointZ");
-        g_dViewerPointF            = get<double>("Viewer.ViewpointF");
+        g_fileConfig["Viewer.KeyFrameSize"]      >> g_dViewerKeyFrameSize;
+        g_fileConfig["Viewer.KeyFrameLineWidth"] >> g_dViewerKeyFrameLineWidth;
+        g_fileConfig["Viewer.GraphLineWidth"]    >> g_dViewerGraphLineWidth;
+        g_fileConfig["Viewer.PointSize"]         >> g_dViewerPointSize;
+        g_fileConfig["Viewer.CameraSize"]        >> g_dViewerCameraSize;
+        g_fileConfig["Viewer.CameraLineWidth"]   >> g_dViewerCameraLineWidth;
+        g_fileConfig["Viewer.ViewpointX"]        >> g_dViewerPointX;
+        g_fileConfig["Viewer.ViewpointY"]        >> g_dViewerPointY;
+        g_fileConfig["Viewer.ViewpointZ"]        >> g_dViewerPointZ;
+        g_fileConfig["Viewer.ViewpointF"]        >> g_dViewerPointF;
     }
 
     std::cout << "[Config] Successfully loaded KITTI configuration parameters!" << std::endl;

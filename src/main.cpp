@@ -11,7 +11,7 @@
 int main(int argc, char **argv)
 {
     // 设置默认路径
-    std::string strConfigFile = "/home/wzj/LK_VO/config/kitti_config04-12.yaml";
+    std::string strConfigFile = "/home/wzj/Stereo_ORB_VO/config/KITTI04-12.yaml";
     std::string strSequenceDir = "/home/wzj/KITTI/data_odometry_gray/dataset/sequences/05";
 
     // 解析命令行参数
@@ -97,9 +97,12 @@ int main(int argc, char **argv)
             if (!image1.empty())
                 mpClahe->apply(image1, image1Clahe);
             double dTimestamp = vdTimestamps[nFrameId];
-            cv::Mat matDisplay;
-            // 将图像和时间戳传给 VO 系统进行双目跟踪和位姿估计
-            cv::imshow("Top (Left) / Bottom (Right)", matDisplay);
+            if (!image0.empty() && !image1.empty())
+            {
+                cv::Mat matDisplay;
+                cv::vconcat(image0, image1, matDisplay);
+                cv::imshow("Stereo Images (Left | Right)", matDisplay);
+            }
             nFrameId++;
         }
         int nWaitTime = bIsPaused ? 10 : 20;

@@ -178,3 +178,43 @@ std::vector<KeyFrame *> KeyFrame::GetBestCovisibilityKeyFrames(const int &N)
     else
         return std::vector<KeyFrame *>(mvpOrderedConnectedKeyFrames.begin(), mvpOrderedConnectedKeyFrames.begin() + N);
 }
+
+void KeyFrame::AddMapPoint(MapPoint* pMP, const size_t &idx)
+{
+    std::unique_lock<std::mutex> lock(mMutexFeatures);
+    mvpMapPoints[idx] = pMP;
+}
+
+void KeyFrame::EraseMapPointMatch(const size_t &idx)
+{
+    std::unique_lock<std::mutex> lock(mMutexFeatures);
+    mvpMapPoints[idx] = nullptr;
+}
+
+void KeyFrame::EraseMapPointMatch(MapPoint* pMP)
+{
+    int idx = pMP->GetIndexInKeyFrame(this);
+    if(idx >= 0)
+    {
+        std::unique_lock<std::mutex> lock(mMutexFeatures);
+        mvpMapPoints[idx] = nullptr;
+    }
+}
+
+void KeyFrame::ReplaceMapPointMatch(const size_t &idx, MapPoint* pMP)
+{
+    std::unique_lock<std::mutex> lock(mMutexFeatures);
+    mvpMapPoints[idx] = pMP;
+}
+
+std::vector<MapPoint*> KeyFrame::GetMapPointMatches()
+{
+    std::unique_lock<std::mutex> lock(mMutexFeatures);
+    return mvpMapPoints;
+}
+
+MapPoint* KeyFrame::GetMapPoint(const size_t &idx)
+{
+    std::unique_lock<std::mutex> lock(mMutexFeatures);
+    return mvpMapPoints[idx];
+}

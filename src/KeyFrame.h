@@ -18,10 +18,8 @@ class ORBVocabulary;
 class KeyFrame
 {
 public:
-    // 从 Frame 构造 KeyFrame
     KeyFrame(Frame &F, Map* pMap);
 
-    // ---- 位姿管理 (支持多线程安全，使用 Eigen 替代 cv::Mat) ----
     void SetPose(const Eigen::Matrix4f &Tcw);
     Eigen::Matrix4f GetPose();
     Eigen::Matrix4f GetPoseInverse();
@@ -29,7 +27,6 @@ public:
     Eigen::Matrix3f GetRotation();
     Eigen::Vector3f GetTranslation();
 
-    // ---- 共视图 (Covisibility Graph) 管理 ----
     void AddConnection(KeyFrame* pKF, const int &weight);
     void EraseConnection(KeyFrame* pKF);
     void UpdateConnections();
@@ -39,7 +36,6 @@ public:
     std::vector<KeyFrame*> GetConnectedKeyFrames();
     int GetWeight(KeyFrame* pKF);
 
-    // ---- 地图点关联 ----
     void AddMapPoint(MapPoint* pMP, const size_t &idx);
     void EraseMapPointMatch(const size_t &idx);
     void EraseMapPointMatch(MapPoint* pMP);
@@ -47,7 +43,6 @@ public:
     std::vector<MapPoint*> GetMapPointMatches();
     MapPoint* GetMapPoint(const size_t &idx);
 
-    // ---- 词袋与属性检索 ----
     void ComputeBoW();
 
     // 标识与时间戳
@@ -79,12 +74,10 @@ public:
     std::vector<float> mvInvLevelSigma2;
 
 private:
-    // ---- 线程安全的数据保护 ----
     std::mutex mMutexPose;
     std::mutex mMutexConnections;
     std::mutex mMutexFeatures;
 
-    // 相机位姿 (World -> Camera) - 改用 Eigen 存储
     Eigen::Matrix4f Tcw;
     Eigen::Vector3f Ow;
     Eigen::Matrix3f Rcw;

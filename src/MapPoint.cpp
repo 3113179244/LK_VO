@@ -242,3 +242,12 @@ bool MapPoint::IsInKeyFrame(KeyFrame* pKF)
     std::unique_lock<std::mutex> lock(mMutexFeatures);
     return mObservations.count(pKF);
 }
+
+int MapPoint::GetIndexInKeyFrame(KeyFrame* pKF)
+{
+    std::unique_lock<std::mutex> lock(mMutexFeatures);
+    if (mObservations.count(pKF)) {
+        return mObservations[pKF];
+    }
+    return -1;
+}

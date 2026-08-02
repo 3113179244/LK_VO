@@ -64,7 +64,6 @@ int main(int argc, char **argv)
     System SLAM(strConfigFile, System::STEREO, true);
     int nFrameId = 0;
     bool bIsPaused = false;
-    cv::Ptr<cv::CLAHE> mpClahe = cv::createCLAHE(3.0, cv::Size(8, 8));
     // 循环处理每一帧
     while (true)
     {
@@ -92,13 +91,8 @@ int main(int argc, char **argv)
                 std::cerr << "错误: 无法读取图像: " << strFilename << std::endl;
                 break;
             }
-            cv::Mat image0Clahe, image1Clahe;
-            if (!image0.empty())
-                mpClahe->apply(image0, image0Clahe);
-            if (!image1.empty())
-                mpClahe->apply(image1, image1Clahe);
             double dTimestamp = vdTimestamps[nFrameId];
-            Eigen::Matrix4f Tcw = SLAM.TrackStereo(image0Clahe, image1Clahe, dTimestamp);
+            Eigen::Matrix4f Tcw = SLAM.TrackStereo(image0, image1, dTimestamp);
             if (!image0.empty() && !image1.empty())
             {
                 cv::Mat imDraw = SLAM.DrawFrame();

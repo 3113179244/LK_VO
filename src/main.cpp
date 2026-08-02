@@ -101,9 +101,11 @@ int main(int argc, char **argv)
             Eigen::Matrix4f Tcw = SLAM.TrackStereo(image0Clahe, image1Clahe, dTimestamp);
             if (!image0.empty() && !image1.empty())
             {
-                cv::Mat matDisplay;
-                cv::vconcat(image0, image1, matDisplay);
-                cv::imshow("Stereo Images (Left | Right)", matDisplay);
+                cv::Mat imDraw = SLAM.DrawFrame();
+                if (!imDraw.empty())
+                {
+                    cv::imshow("ORB-SLAM2 Frame Drawer", imDraw);
+                }
             }
             nFrameId++;
         }

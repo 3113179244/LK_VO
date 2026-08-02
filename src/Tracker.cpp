@@ -5,8 +5,8 @@
 #include "MapPoint.h"
 #include "KeyFrame.h"
 #include "Map.h"
-
-Tracker::Tracker(System* pSys, std::shared_ptr<Map> pMap, int sensor)
+#include "FrameDrawer.h"
+Tracker::Tracker(System *pSys, std::shared_ptr<Map> pMap, int sensor)
     : mpSystem(pSys), mpMap(pMap), mState(NO_IMAGES_YET), mVelocity(Eigen::Matrix4f::Identity()), mpReferenceKF(nullptr)
 {
     // 从 Config 类中加载 ORB 提取器参数
@@ -27,8 +27,8 @@ Eigen::Matrix4f Tracker::GrabImageStereo(const cv::Mat &imRectLeft, const cv::Ma
 {
     // 构建内参矩阵与畸变矩阵
     cv::Mat K = (cv::Mat_<float>(3, 3) << Config::g_dFx, 0, Config::g_dCx,
-                                           0, Config::g_dFy, Config::g_dCy,
-                                           0, 0, 1);
+                 0, Config::g_dFy, Config::g_dCy,
+                 0, 0, 1);
     cv::Mat DistCoef = (cv::Mat_<float>(4, 1) << Config::g_dK1, Config::g_dK2, Config::g_dP1, Config::g_dP2);
 
     // 实例化当前帧 (内部自动触发多线程特征提取 + 双目匹配计算深度)
@@ -45,13 +45,16 @@ Eigen::Matrix4f Tracker::GrabImageStereo(const cv::Mat &imRectLeft, const cv::Ma
 
 void Tracker::Track()
 {
-    if (mState == NO_IMAGES_YET) {
+    if (mState == NO_IMAGES_YET)
+    {
         mState = NOT_INITIALIZED;
     }
 
     // 阶段 A: 未初始化状态 -> 执行双目初始化
-    if (mState == NOT_INITIALIZED) {
-        if (StereoInitialization()) {
+    if (mState == NOT_INITIALIZED)
+    {
+        if (StereoInitialization())
+        {
             mState = OK;
         }
         return;
@@ -61,36 +64,41 @@ void Tracker::Track()
     bool bOK = false;
 
     // 1. 优先尝试恒速模型跟踪 (Velocity Model)
-    if (!mVelocity.isIdentity() && mLastFrame.mnId == mCurrentFrame.mnId - 1) {
+    if (!mVelocity.isIdentity() && mLastFrame.mnId == mCurrentFrame.mnId - 1)
+    {
         bOK = TrackWithMotionModel();
     }
 
     // 2. 若运动模型失效，回退到参考关键帧跟踪
-    if (!bOK) {
+    if (!bOK)
+    {
         bOK = TrackReferenceKeyFrame();
     }
 
     // 3. 跟踪局部地图进行位姿精确优化
-    if (bOK) {
+    if (bOK)
+    {
         bOK = TrackLocalMap();
     }
 
-    if (bOK) {
+    if (bOK)
+    {
         mState = OK;
-
-        // 更新恒速模型的相对速度 T_c_l = T_c_w * T_w_l
         mVelocity = mCurrentFrame.mTcw * mLastFrame.mTcw.inverse();
-
-        // 检查并判断是否生成新的关键帧
-        if (NeedNewKeyFrame()) {
+        if (NeedNewKeyFrame())
+        {
             CreateNewKeyFrame();
         }
-    } else {
+    }
+    else
+    {
         mState = LOST;
     }
-
-    // 保存上一帧数据
     mLastFrame = Frame(mCurrentFrame);
+    if (mpFrameDrawer)
+    {
+        mpFrameDrawer->Update(this);
+    }
 }
 
 bool Tracker::StereoInitialization()
@@ -101,16 +109,18 @@ bool Tracker::StereoInitialization()
     mCurrentFrame.SetPose(Eigen::Matrix4f::Identity());
 
     // 创建第一帧对应的 KeyFrame 并加入 Map
-    KeyFrame* pKFinit = new KeyFrame(mCurrentFrame, mpMap.get());
+    KeyFrame *pKFinit = new KeyFrame(mCurrentFrame, mpMap.get());
     mpMap->AddKeyFrame(pKFinit);
 
     // 为当前帧所有有效的双目特征点反投影生成 MapPoint
-    for (int i = 0; i < mCurrentFrame.N; i++) {
+    for (int i = 0; i < mCurrentFrame.N; i++)
+    {
         float z = mCurrentFrame.mvDepth[i];
-        if (z > 0) {
+        if (z > 0)
+        {
             Eigen::Vector3f p3D = mCurrentFrame.UnprojectStereo(i);
-            MapPoint* pMP = new MapPoint(p3D, pKFinit, mpMap.get());
-            
+            MapPoint *pMP = new MapPoint(p3D, pKFinit, mpMap.get());
+
             pMP->AddObservation(pKFinit, i);
             pKFinit->AddMapPoint(pMP, i);
             pMP->ComputeDistinctiveDescriptor();
@@ -134,9 +144,9 @@ bool Tracker::TrackWithMotionModel()
 
     // 通过投影映射将上一帧的地图点与当前帧做匹配，并通过 MotionOnlyBA (BA 优化) 估计姿态
     // (对应调用 ORBmatcher 和 Optimizer::PoseOptimization)
-    
+
     // 假设优化后匹配内点数满足阈值
-    mnMatchesInliers = 30; 
+    mnMatchesInliers = 30;
     return (mnMatchesInliers >= 10);
 }
 
@@ -168,7 +178,7 @@ bool Tracker::NeedNewKeyFrame()
 
 void Tracker::CreateNewKeyFrame()
 {
-    KeyFrame* pKF = new KeyFrame(mCurrentFrame, mpMap.get());
+    KeyFrame *pKF = new KeyFrame(mCurrentFrame, mpMap.get());
     mpMap->AddKeyFrame(pKF);
     mpReferenceKF = pKF;
     mnLastKeyFrameId = mCurrentFrame.mnId;

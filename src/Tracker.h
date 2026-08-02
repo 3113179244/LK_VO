@@ -39,14 +39,12 @@ public:
     Frame mLastFrame;
 
 private:
-    // ---- 跟踪主流程阶段 ----
     void Track();
     bool StereoInitialization();
     bool TrackWithMotionModel();
     bool TrackReferenceKeyFrame();
     bool TrackLocalMap();
     std::shared_ptr<FrameDrawer> mpFrameDrawer;
-    // ---- 关键帧决策机制 ----
     bool NeedNewKeyFrame();
     void CreateNewKeyFrame();
     System *mpSystem;

@@ -4,7 +4,8 @@
 #include <thread>
 #include <cmath>
 #include "Config.h"
-// 静态变量初始化
+#include <algorithm>   
+#include <limits> 
 long unsigned int Frame::nNextId = 0;
 bool Frame::mbInitialComputations = true;
 float Frame::fx = 0, Frame::fy = 0, Frame::cx = 0, Frame::cy = 0, Frame::invfx = 0, Frame::invfy = 0;
@@ -36,7 +37,8 @@ Frame::Frame(const cv::Mat &imLeft, const cv::Mat &imRight, const double &timeSt
 
     // 此处简化了去畸变过程。在实际系统中，若输入图像已极线校正，可直接拷贝 mvKeysUn = mvKeys
     mvKeysUn = mvKeys;
-
+    mImGrayLeft = imLeft.clone();
+    mImGrayRight = imRight.clone();
     // 双目匹配，通过左右目特征点匹配计算视差，进而获得深度信息
     ComputeStereoMatches();
 
@@ -66,8 +68,6 @@ Frame::Frame(const cv::Mat &imLeft, const cv::Mat &imRight, const double &timeSt
 
     // 计算物理基线长度 $b = \frac{bf}{f_x}$
     mb = mbf / fx;
-    mImGrayLeft = imLeft.clone();
-    mImGrayRight = imRight.clone(); 
     // 将特征点划分到网格中，加速局部区域特征匹配搜索
     AssignFeaturesToGrid();
 }

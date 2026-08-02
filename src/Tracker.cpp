@@ -6,6 +6,8 @@
 #include "KeyFrame.h"
 #include "Map.h"
 #include "FrameDrawer.h"
+#include <algorithm>
+#include <iostream>
 Tracker::Tracker(System *pSys, std::shared_ptr<Map> pMap, int sensor)
     : mpSystem(pSys), mpMap(pMap), mState(NO_IMAGES_YET), mVelocity(Eigen::Matrix4f::Identity()), mpReferenceKF(nullptr)
 {
@@ -35,7 +37,17 @@ Eigen::Matrix4f Tracker::GrabImageStereo(const cv::Mat &imRectLeft, const cv::Ma
     mCurrentFrame = Frame(imRectLeft, imRectRight, timestamp,
                           mpORBextractorLeft.get(), mpORBextractorRight.get(),
                           nullptr, K, DistCoef, Config::g_dBf, Config::g_dThDepth);
+    // 打印部分                      
+    int nLeft = mCurrentFrame.mvKeys.size();
+    int nRight = mCurrentFrame.mvKeysRight.size();
+    int nMatches = std::count_if(mCurrentFrame.mvuRight.begin(), mCurrentFrame.mvuRight.end(),
+                                 [](float d)
+                                 { return d >= 0; }); // 或 mvDepth[i] > 0
 
+    std::cout << "Frame " << mCurrentFrame.mnId
+              << " | Left features: " << nLeft
+              << " | Right features: " << nRight
+              << " | Stereo matches: " << nMatches << std::endl;
     // 执行跟踪状态机主逻辑
     Track();
 

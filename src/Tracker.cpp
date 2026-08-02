@@ -95,26 +95,24 @@ void Tracker::Track()
 
 bool Tracker::StereoInitialization()
 {
-    // 双目系统只需当前帧具备足够有效深度点（视差 > 0）
     if (mCurrentFrame.N < 500)
         return false;
 
-    // 设置第一帧的世界位姿为单位阵 Origin: Tcw = I
     mCurrentFrame.SetPose(Eigen::Matrix4f::Identity());
 
     // 创建第一帧对应的 KeyFrame 并加入 Map
-    KeyFrame* pKFini = new KeyFrame(mCurrentFrame, mpMap.get());
-    mpMap->AddKeyFrame(pKFini);
+    KeyFrame* pKFinit = new KeyFrame(mCurrentFrame, mpMap.get());
+    mpMap->AddKeyFrame(pKFinit);
 
     // 为当前帧所有有效的双目特征点反投影生成 MapPoint
     for (int i = 0; i < mCurrentFrame.N; i++) {
         float z = mCurrentFrame.mvDepth[i];
         if (z > 0) {
             Eigen::Vector3f p3D = mCurrentFrame.UnprojectStereo(i);
-            MapPoint* pMP = new MapPoint(p3D, pKFini, mpMap.get());
+            MapPoint* pMP = new MapPoint(p3D, pKFinit, mpMap.get());
             
-            pMP->AddObservation(pKFini, i);
-            pKFini->AddMapPoint(pMP, i);
+            pMP->AddObservation(pKFinit, i);
+            pKFinit->AddMapPoint(pMP, i);
             pMP->ComputeDistinctiveDescriptor();
             pMP->UpdateNormalAndDepth();
 
@@ -123,7 +121,7 @@ bool Tracker::StereoInitialization()
         }
     }
 
-    mpReferenceKF = pKFini;
+    mpReferenceKF = pKFinit;
     mnLastKeyFrameId = mCurrentFrame.mnId;
 
     return true;

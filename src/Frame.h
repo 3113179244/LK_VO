@@ -22,9 +22,9 @@ public:
     Frame();
 
     // 双目帧构造函数：传入左右目图像、时间戳、ORB特征提取器、词袋模型、相机内参及双目基线参数
-    Frame(const cv::Mat &imLeft, const cv::Mat &imRight, const double &timeStamp, 
-          ORBextractor* extractorLeft, ORBextractor* extractorRight, 
-          ORBVocabulary* voc, cv::Mat &K, cv::Mat &distCoef, const float &bf, const float &thDepth);
+    Frame(const cv::Mat &imLeft, const cv::Mat &imRight, const double &timeStamp,
+          ORBextractor *extractorLeft, ORBextractor *extractorRight,
+          ORBVocabulary *voc, cv::Mat &K, cv::Mat &distCoef, const float &bf, const float &thDepth);
 
     // 提取 ORB 特征，flag=0 代表左图，flag=1 代表右图
     void ExtractORB(int flag, const cv::Mat &im);
@@ -46,14 +46,15 @@ public:
 
     // 获取图像中以 (x,y) 为中心、r 为半径的圆形区域内的所有特征点索引
     // minLevel 和 maxLevel 用于限制提取特征点的金字塔层级
-    std::vector<size_t> GetFeaturesInArea(const float &x, const float &y, const float &r, 
+    std::vector<size_t> GetFeaturesInArea(const float &x, const float &y, const float &r,
                                           const int minLevel = -1, const int maxLevel = -1) const;
 
     // 全局静态变量，用于分配唯一的帧 ID
     static long unsigned int nNextId;
     long unsigned int mnId; // 当前帧的 ID
     double mTimeStamp;      // 时间戳
-
+    cv::Mat mImGrayLeft;    
+    cv::Mat mImGrayRight;
     // 相机内参相关
     cv::Mat mK;
     static float fx, fy, cx, cy, invfx, invfy; // 焦距及其倒数、主点坐标
@@ -63,16 +64,16 @@ public:
     float mThDepth;                            // 区分远近点的深度阈值
 
     // 特征点数据
-    int N; // 提取到的特征点总数
+    int N;                                                   // 提取到的特征点总数
     std::vector<cv::KeyPoint> mvKeys, mvKeysRight, mvKeysUn; // 左图特征点、右图特征点、去畸变后的左图特征点
     cv::Mat mDescriptors, mDescriptorsRight;                 // 左图和右图的特征描述子
-    
+
     std::vector<float> mvuRight; // 左图特征点在右图中的匹配横坐标 (用于双目)
     std::vector<float> mvDepth;  // 左图特征点对应的深度值
 
     // 地图点及外点标记
-    std::vector<MapPoint*> mvpMapPoints; // 每个特征点关联的 3D 地图点 (若无关联则为空指针)
-    std::vector<bool> mvbOutlier;        // 标记每个特征点对应的地图点是否被判断为外点 (Outlier)
+    std::vector<MapPoint *> mvpMapPoints; // 每个特征点关联的 3D 地图点 (若无关联则为空指针)
+    std::vector<bool> mvbOutlier;         // 标记每个特征点对应的地图点是否被判断为外点 (Outlier)
 
     // 相机位姿矩阵 $T_{cw}$
     Eigen::Matrix4f mTcw;
@@ -84,9 +85,9 @@ public:
     std::vector<std::size_t> mGrid[FRAME_GRID_COLS][FRAME_GRID_ROWS]; // 二维网格，存储落入各个网格的特征点索引
 
     // 工具类指针
-    ORBextractor* mpORBextractorLeft;
-    ORBextractor* mpORBextractorRight;
-    ORBVocabulary* mpORBvocabulary;
+    ORBextractor *mpORBextractorLeft;
+    ORBextractor *mpORBextractorRight;
+    ORBVocabulary *mpORBvocabulary;
 
     // 标志位：是否是第一次进行相机的内参和网格参数计算
     static bool mbInitialComputations;

@@ -3,7 +3,7 @@
 #include "ORBmatcher.h"
 #include <thread>
 #include <cmath>
-
+#include "Config.h"
 // 静态变量初始化
 long unsigned int Frame::nNextId = 0;
 bool Frame::mbInitialComputations = true;
@@ -23,7 +23,7 @@ Frame::Frame(const cv::Mat &imLeft, const cv::Mat &imRight, const double &timeSt
     // 分配唯一的帧 ID，并递增计数器
     mnId = nNextId++;
 
-    // 1. 多线程并发提取左右图 ORB 特征，以加速前端处理
+    // 多线程并发提取左右图 ORB 特征，以加速前端处理
     std::thread threadLeft(&Frame::ExtractORB, this, 0, imLeft);
     std::thread threadRight(&Frame::ExtractORB, this, 1, imRight);
     threadLeft.join();
@@ -37,14 +37,14 @@ Frame::Frame(const cv::Mat &imLeft, const cv::Mat &imRight, const double &timeSt
     // 此处简化了去畸变过程。在实际系统中，若输入图像已极线校正，可直接拷贝 mvKeysUn = mvKeys
     mvKeysUn = mvKeys; 
 
-    // 2. 双目匹配，通过左右目特征点匹配计算视差，进而获得深度信息
+    // 双目匹配，通过左右目特征点匹配计算视差，进而获得深度信息
     ComputeStereoMatches();
 
-    // 3. 初始化地图点和外点标记数组，大小为特征点总数 N
+    // 初始化地图点和外点标记数组，大小为特征点总数 N
     mvpMapPoints = std::vector<MapPoint*>(N, nullptr);    
     mvbOutlier = std::vector<bool>(N, false);
 
-    // 4. 初始化图像边界和相机内参。因为是静态变量，只需在程序启动时(第一帧)计算一次
+    // 初始化图像边界和相机内参。因为是静态变量，只需在程序启动时(第一帧)计算一次
     if(mbInitialComputations)
     {
         ComputeImageBounds(imLeft);
@@ -67,7 +67,7 @@ Frame::Frame(const cv::Mat &imLeft, const cv::Mat &imRight, const double &timeSt
     // 计算物理基线长度 $b = \frac{bf}{f_x}$
     mb = mbf / fx; 
 
-    // 5. 将特征点划分到网格中，加速局部区域特征匹配搜索
+    // 将特征点划分到网格中，加速局部区域特征匹配搜索
     AssignFeaturesToGrid();
 }
 
@@ -110,14 +110,107 @@ void Frame::UpdatePoseMatrices()
 // 计算双目匹配以获取深度 (此处为框架示意代码)
 void Frame::ComputeStereoMatches()
 {
-    // 初始化左右目匹配横坐标和深度值
+    // 初始化容器：N 为左图提取的特征点总数
     mvuRight = std::vector<float>(N, -1.0f);
-    mvDepth = std::vector<float>(N, -1.0f);
+    mvDepth  = std::vector<float>(N, -1.0f);
 
-    // 在真实实现中，由于图像已经经过极线校正，可以约束 y 坐标寻找匹配：
-    // 通过遍历左图特征点 mvKeys[i]，在右图 mvKeysRight 中寻找 y 坐标相近的特征点。
-    // 计算描述子汉明距离，找到最佳匹配后，计算视差 $d = u_L - u_R$
-    // 最终深度公式为：$Z = \frac{bf}{d}$
+    // 参数设置
+    const float thOrbDist = 60.0f;       // ORB 描述子汉明距离阈值
+    const float thY = 1.5f;            // 极线约束：y 方向允许的最大像素偏差
+    const float minZ = 0.0f;             // 最小有效深度
+    const float minD = 0.0f;             // 最小视差（必须 > 0）
+    const float maxD = fx;               // 最大视差，可设为 fx 或图像宽度，防止除零
+
+    // 为右图特征点建立 y 坐标索引，避免每次全量遍历
+    const int nRows = Config::g_nImageHeight;               // 可根据 Config::g_nImageHeight 动态设置
+    std::vector<std::vector<size_t>> vRowIndices(nRows);
+    for (size_t iR = 0; iR < mvKeysRight.size(); iR++)
+    {
+        const cv::KeyPoint &kp = mvKeysRight[iR];
+        const float &y = kp.pt.y;
+        const int row = cvRound(y);
+        if (row >= 0 && row < nRows)
+            vRowIndices[row].push_back(iR);
+    }
+
+    // 遍历左图每个特征点，在右图寻找最佳匹配
+    for (int iL = 0; iL < N; iL++)
+    {
+        const cv::KeyPoint &kpL = mvKeys[iL];
+        const float &uL = kpL.pt.x;
+        const float &vL = kpL.pt.y;
+        const int levelL = kpL.octave;
+        const float &vL_rounded = vL;
+
+        // 只考虑第 0 层（或根据需求放宽）的特征点进行双目匹配，
+        // 因为高金字塔层分辨率低，视差计算误差大。
+        // 如果追求速度可保留此限制；若追求点数量可注释掉。
+        // if (levelL != 0) continue;
+
+        // 在右图中收集 y 坐标相近的候选点
+        std::vector<size_t> vCandidates;
+        const int minRow = std::max(0, (int)(vL_rounded - thY));
+        const int maxRow = std::min(nRows - 1, (int)(vL_rounded + thY));
+
+        for (int row = minRow; row <= maxRow; row++)
+        {
+            for (size_t idx : vRowIndices[row])
+            {
+                const cv::KeyPoint &kpR = mvKeysRight[idx];
+                // 金字塔层级差异不能太大（保证尺度一致性）
+                if (abs(kpR.octave - levelL) > 1) continue;
+                vCandidates.push_back(idx);
+            }
+        }
+
+        if (vCandidates.empty()) continue;
+
+        // 计算描述子距离，寻找最佳和次佳匹配
+        const cv::Mat &dL = mDescriptors.row(iL);
+        int bestDist = INT_MAX;
+        int bestDist2 = INT_MAX;   // 次佳距离，用于 Ratio Test
+        int bestIdxR = -1;
+
+        for (size_t iRc : vCandidates)
+        {
+            const cv::Mat &dR = mDescriptorsRight.row(iRc);
+            const int dist = ORBmatcher::DescriptorDistance(dL, dR);
+
+            if (dist < bestDist)
+            {
+                bestDist2 = bestDist;
+                bestDist = dist;
+                bestIdxR = iRc;
+            }
+            else if (dist < bestDist2)
+            {
+                bestDist2 = dist;
+            }
+        }
+
+        // 匹配质量过滤
+        // 最佳距离必须小于阈值
+        if (bestDist > thOrbDist) continue;
+        // 唯一性比率测试：最佳匹配必须明显优于次佳匹配（避免模糊匹配）
+        if (bestDist2 > 0 && static_cast<float>(bestDist) > 0.8f * static_cast<float>(bestDist2)) continue;
+
+        // 计算视差与深度
+        const float uR = mvKeysRight[bestIdxR].pt.x;
+        const float disparity = uL - uR;   // 视差：左 x - 右 x（必须为正）
+
+        // 视差有效性检查
+        if (disparity <= minD || disparity >= maxD) continue;
+
+        // 深度计算：Z = (baseline * fx) / disparity
+        const float depth = mbf / disparity;
+
+        // 深度有效性检查
+        if (depth <= minZ || depth > mThDepth) continue;
+
+        // 保存结果
+        mvuRight[iL] = uR;
+        mvDepth[iL]  = depth;
+    }
 }
 
 // 将指定特征点反投影为 3D 世界坐标
@@ -129,14 +222,14 @@ Eigen::Vector3f Frame::UnprojectStereo(const int &i)
         const float u = mvKeysUn[i].pt.x;
         const float v = mvKeysUn[i].pt.y;
         
-        // 1. 像素坐标转相机坐标：
+        // 像素坐标转相机坐标：
         // $X_c = \frac{(u - c_x) \cdot Z}{f_x}$
         // $Y_c = \frac{(v - c_y) \cdot Z}{f_y}$
         const float x = (u - cx) * z * invfx;
         const float y = (v - cy) * z * invfy;
         Eigen::Vector3f x3Dc(x, y, z);
         
-        // 2. 相机坐标转世界坐标: $P_{world} = R_{wc} \cdot P_{camera} + O_w$
+        // 相机坐标转世界坐标: $P_{world} = R_{wc} \cdot P_{camera} + O_w$
         return mRwc * x3Dc + mOw;
     }
     return Eigen::Vector3f::Zero(); // 如果没有有效的深度值，则返回全零向量

@@ -61,6 +61,7 @@ int main(int argc, char **argv)
     std::cout << "  - 空格键 (Space): 暂停/恢复播放" << std::endl;
     std::cout << "  - Q 键           : 恢复播放" << std::endl;
     std::cout << "  - ESC 键         : 退出程序" << std::endl;
+    System SLAM(strConfigFile, System::STEREO, true);
     int nFrameId = 0;
     bool bIsPaused = false;
     cv::Ptr<cv::CLAHE> mpClahe = cv::createCLAHE(3.0, cv::Size(8, 8));
@@ -97,6 +98,7 @@ int main(int argc, char **argv)
             if (!image1.empty())
                 mpClahe->apply(image1, image1Clahe);
             double dTimestamp = vdTimestamps[nFrameId];
+            Eigen::Matrix4f Tcw = SLAM.TrackStereo(image0Clahe, image1Clahe, dTimestamp);
             if (!image0.empty() && !image1.empty())
             {
                 cv::Mat matDisplay;

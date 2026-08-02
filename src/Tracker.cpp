@@ -25,21 +25,21 @@ Tracker::~Tracker() {}
 
 Eigen::Matrix4f Tracker::GrabImageStereo(const cv::Mat &imRectLeft, const cv::Mat &imRectRight, const double &timestamp)
 {
-    // 1. 构建内参矩阵与畸变矩阵
+    // 构建内参矩阵与畸变矩阵
     cv::Mat K = (cv::Mat_<float>(3, 3) << Config::g_dFx, 0, Config::g_dCx,
                                            0, Config::g_dFy, Config::g_dCy,
                                            0, 0, 1);
     cv::Mat DistCoef = (cv::Mat_<float>(4, 1) << Config::g_dK1, Config::g_dK2, Config::g_dP1, Config::g_dP2);
 
-    // 2. 实例化当前帧 (内部自动触发多线程特征提取 + 双目匹配计算深度)
+    // 实例化当前帧 (内部自动触发多线程特征提取 + 双目匹配计算深度)
     mCurrentFrame = Frame(imRectLeft, imRectRight, timestamp,
                           mpORBextractorLeft.get(), mpORBextractorRight.get(),
                           nullptr, K, DistCoef, Config::g_dBf, Config::g_dThDepth);
 
-    // 3. 执行跟踪状态机主逻辑
+    // 执行跟踪状态机主逻辑
     Track();
 
-    // 4. 返回当前帧姿态
+    // 返回当前帧姿态
     return mCurrentFrame.mTcw;
 }
 

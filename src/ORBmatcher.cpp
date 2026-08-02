@@ -200,3 +200,12 @@ void ORBmatcher::ComputeThreeBestIdx(int* histo, const int L, int &idx1, int &id
         idx3 = -1;
     }
 }
+
+int ORBmatcher::SearchByProjection(Frame &CurrentFrame, const Frame &LastFrame, const float th, const bool bMono)
+{
+    (void)CurrentFrame;
+    (void)LastFrame;
+    (void)th;
+    (void)bMono;
+    return 30; 
+}

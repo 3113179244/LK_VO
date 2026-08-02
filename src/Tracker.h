@@ -13,6 +13,9 @@ class Map;
 class Viewer;
 class ORBextractor;
 class KeyFrame;
+class ORBmatcher;
+class MotionOnlyBA;
+
 class Tracker
 {
 public:

@@ -16,6 +16,8 @@ find_package(Sophus REQUIRED)
 find_package(Pangolin REQUIRED)
 find_package(OpenGL REQUIRED)
 find_package(GLEW REQUIRED)
+find_package(g2o REQUIRED)
+find_package(fmt REQUIRED)
 
 include_directories(
   src
@@ -39,6 +41,7 @@ add_library(${PROJECT_NAME}_lib
   src/MapPoint.cpp
   src/Optimizer.cpp
   src/System.cpp
+  src/MotionOnlyBA.cpp
   src/Tracker.cpp
   src/Viewer.cpp
   src/FrameDrawer.cpp
@@ -50,8 +53,13 @@ target_link_libraries(${PROJECT_NAME}_lib
   Sophus::Sophus
   pango_display        
   ${OPENGL_LIBRARIES}
+  g2o_core                  
+  g2o_stuff
+  g2o_types_sba
+  g2o_solver_eigen
   GLEW::GLEW
   pthread
+  fmt::fmt
 )
 
 add_executable(Stereo_ORB_VO src/main.cpp)

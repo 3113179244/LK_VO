@@ -38,6 +38,8 @@ public:
      */
     int ComputeStereoMatches(Frame &F);
 
+    int SearchByProjection(Frame &CurrentFrame, const Frame &LastFrame, const float th, const bool bMono = false);
+    
     static const int TH_LOW;       // 匹配距离较低阈值，用于要求较高的匹配场景（如非连续帧或宽基线）
     static const int TH_HIGH;      // 匹配距离较高阈值，用于要求较宽松的场景（如连续帧追踪）
     static const int HISTO_LENGTH; // 方向直方图的 Bin 数量 (通常为 36 个 bin，每 10 度划分一个)
@@ -52,10 +54,10 @@ private:
      * @param idx2  输出：包含匹配点第二多的 Bin 索引
      * @param idx3  输出：包含匹配点第三多的 Bin 索引
      */
-    void ComputeThreeBestIdx(int* histo, const int L, int &idx1, int &idx2, int &idx3);
+    void ComputeThreeBestIdx(int *histo, const int L, int &idx1, int &idx2, int &idx3);
 
-    float mfNNratio;            // 最优/次优距离比率阈值
-    bool mbCheckOrientation;    // 角度（方向）一致性检查标志位
+    float mfNNratio;         // 最优/次优距离比率阈值
+    bool mbCheckOrientation; // 角度（方向）一致性检查标志位
 };
 
 #endif // ORBMATCHER_H

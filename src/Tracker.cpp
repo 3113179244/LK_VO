@@ -8,6 +8,9 @@
 #include "FrameDrawer.h"
 #include <algorithm>
 #include <iostream>
+#include "ORBmatcher.h"
+#include "MotionOnlyBA.h"
+
 Tracker::Tracker(System *pSys, std::shared_ptr<Map> pMap, int sensor)
     : mpSystem(pSys), mpMap(pMap), mState(NO_IMAGES_YET), mVelocity(Eigen::Matrix4f::Identity()), mpReferenceKF(nullptr)
 {
@@ -37,17 +40,17 @@ Eigen::Matrix4f Tracker::GrabImageStereo(const cv::Mat &imRectLeft, const cv::Ma
     mCurrentFrame = Frame(imRectLeft, imRectRight, timestamp,
                           mpORBextractorLeft.get(), mpORBextractorRight.get(),
                           nullptr, K, DistCoef, Config::g_dBf, Config::g_dThDepth);
-    // 打印部分                      
-    int nLeft = mCurrentFrame.mvKeys.size();
-    int nRight = mCurrentFrame.mvKeysRight.size();
-    int nMatches = std::count_if(mCurrentFrame.mvuRight.begin(), mCurrentFrame.mvuRight.end(),
-                                 [](float d)
-                                 { return d >= 0; }); // 或 mvDepth[i] > 0
+    // 打印左右目图像的特征点，双目匹配成功点数
+    // int nLeft = mCurrentFrame.mvKeys.size();
+    // int nRight = mCurrentFrame.mvKeysRight.size();
+    // int nMatches = std::count_if(mCurrentFrame.mvuRight.begin(), mCurrentFrame.mvuRight.end(),
+    //                              [](float d)
+    //                              { return d >= 0; }); // 或 mvDepth[i] > 0
 
-    std::cout << "Frame " << mCurrentFrame.mnId
-              << " | Left features: " << nLeft
-              << " | Right features: " << nRight
-              << " | Stereo matches: " << nMatches << std::endl;
+    // std::cout << "Frame " << mCurrentFrame.mnId
+    //           << " | Left features: " << nLeft
+    //           << " | Right features: " << nRight
+    //           << " | Stereo matches: " << nMatches << std::endl;
     // 执行跟踪状态机主逻辑
     Track();
 
@@ -151,15 +154,47 @@ bool Tracker::StereoInitialization()
 
 bool Tracker::TrackWithMotionModel()
 {
-    // 根据恒速模型粗略预测当前位姿: T_cw = T_cl * T_lw
+    // 1. 根据恒速模型粗略预测当前位姿: T_cw = V * T_lw
     mCurrentFrame.SetPose(mVelocity * mLastFrame.mTcw);
 
-    // 通过投影映射将上一帧的地图点与当前帧做匹配，并通过 MotionOnlyBA (BA 优化) 估计姿态
-    // (对应调用 ORBmatcher 和 Optimizer::PoseOptimization)
+    // 2. 清空当前帧的地图点指针数组
+    mCurrentFrame.mvpMapPoints = std::vector<MapPoint *>(mCurrentFrame.N, static_cast<MapPoint *>(nullptr));
 
-    // 假设优化后匹配内点数满足阈值
-    mnMatchesInliers = 30;
-    return (mnMatchesInliers >= 10);
+    // 3. 利用投影建立上一帧地图点与当前帧特征点的匹配
+    ORBmatcher matcher(0.9, true);
+    int nmatches = matcher.SearchByProjection(mCurrentFrame, mLastFrame, 15); // 搜索半径阈值设为15
+
+    if (nmatches < 20)
+    {
+        // 匹配点太少，放大搜索半径重试一次
+        mCurrentFrame.mvpMapPoints = std::vector<MapPoint *>(mCurrentFrame.N, static_cast<MapPoint *>(nullptr));
+        nmatches = matcher.SearchByProjection(mCurrentFrame, mLastFrame, 2 * 15);
+    }
+
+    if (nmatches < 20)
+        return false;
+
+    // 4. 只优化当前帧位姿 (Pose Optimization / Motion-only BA)
+    int nInliers = MotionOnlyBA::Optimize(&mCurrentFrame);
+
+    // 5. 剔除优化时被判定为外点的匹配
+    for (int i = 0; i < mCurrentFrame.N; i++)
+    {
+        if (mCurrentFrame.mvpMapPoints[i])
+        {
+            if (mCurrentFrame.mvbOutlier[i])
+            {
+                mCurrentFrame.mvpMapPoints[i] = static_cast<MapPoint *>(nullptr);
+                mCurrentFrame.mvbOutlier[i] = false;
+                nmatches--;
+            }
+        }
+    }
+
+    mnMatchesInliers = nInliers;
+
+    // 6. 内点数满足要求则跟踪成功
+    return (nInliers >= 10);
 }
 
 bool Tracker::TrackReferenceKeyFrame()

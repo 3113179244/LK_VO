@@ -116,112 +116,154 @@ void Frame::UpdatePoseMatrices()
 // 计算双目匹配以获取深度 (此处为框架示意代码)
 void Frame::ComputeStereoMatches()
 {
-    // 初始化容器：N 为左图提取的特征点总数
     mvuRight = std::vector<float>(N, -1.0f);
     mvDepth = std::vector<float>(N, -1.0f);
 
-    // 参数设置
-    const float thOrbDist = 60.0f; // ORB 描述子汉明距离阈值
-    const float thY = 1.5f;        // 极线约束：y 方向允许的最大像素偏差
-    const float minZ = 0.0f;       // 最小有效深度
-    const float minD = 0.0f;       // 最小视差（必须 > 0）
-    const float maxD = fx;         // 最大视差，可设为 fx 或图像宽度，防止除零
+    const int thOrbDist = (ORBmatcher::TH_HIGH + ORBmatcher::TH_LOW) / 2; // 描述子距离阈值（通常设为 50）
 
-    // 为右图特征点建立 y 坐标索引，避免每次全量遍历
-    const int nRows = Config::g_nImageHeight; // 可根据 Config::g_nImageHeight 动态设置
-    std::vector<std::vector<size_t>> vRowIndices(nRows);
-    for (size_t iR = 0; iR < mvKeysRight.size(); iR++)
+    // 1. 按 y 坐标建立右图特征点的行索引列表（考虑到金字塔尺度）
+    const int nRows = mImGrayLeft.rows;
+    std::vector<std::vector<size_t>> vRowIndices(nRows, std::vector<size_t>());
+
+    for (int iR = 0; iR < mvKeysRight.size(); iR++)
     {
-        const cv::KeyPoint &kp = mvKeysRight[iR];
-        const float &y = kp.pt.y;
-        const int row = cvRound(y);
-        if (row >= 0 && row < nRows)
-            vRowIndices[row].push_back(iR);
+        const cv::KeyPoint &kpR = mvKeysRight[iR];
+        const float &kpY = kpR.pt.y;
+        const float r = mpORBextractorLeft->GetScaleFactors()[kpR.octave] * 2.0f; // 依据金字塔层级调整搜寻搜寻行宽
+
+        const int maxr = ceil(kpY + r);
+        const int minr = floor(kpY - r);
+
+        for (int recl = std::max(0, minr); recl <= std::min(nRows - 1, maxr); recl++)
+            vRowIndices[recl].push_back(iR);
     }
 
-    // 遍历左图每个特征点，在右图寻找最佳匹配
+    // 搜索参数定义
+    const float minZ = mb;          // 最小有效深度 (基线长度)
+    const float minD = 0.0f;        // 最小视差
+    const float maxD = mbf / minZ;  // 最大视差
+
+    // 保存最佳匹配信息
+    std::vector<std::pair<int, int>> vDistIdx;
+    vDistIdx.reserve(N);
+
+    // 2. 遍历左图每个特征点
     for (int iL = 0; iL < N; iL++)
     {
         const cv::KeyPoint &kpL = mvKeys[iL];
-        const float &uL = kpL.pt.x;
+        const int &levelL = kpL.octave;
         const float &vL = kpL.pt.y;
-        const int levelL = kpL.octave;
-        const float &vL_rounded = vL;
+        const float &uL = kpL.pt.x;
 
-        // 只考虑第 0 层（或根据需求放宽）的特征点进行双目匹配，
-        // 因为高金字塔层分辨率低，视差计算误差大。
-        // 如果追求速度可保留此限制；若追求点数量可注释掉。
-        // if (levelL != 0) continue;
-
-        // 在右图中收集 y 坐标相近的候选点
-        std::vector<size_t> vCandidates;
-        const int minRow = std::max(0, (int)(vL_rounded - thY));
-        const int maxRow = std::min(nRows - 1, (int)(vL_rounded + thY));
-
-        for (int row = minRow; row <= maxRow; row++)
-        {
-            for (size_t idx : vRowIndices[row])
-            {
-                const cv::KeyPoint &kpR = mvKeysRight[idx];
-                // 金字塔层级差异不能太大（保证尺度一致性）
-                if (abs(kpR.octave - levelL) > 1)
-                    continue;
-                vCandidates.push_back(idx);
-            }
-        }
+        const std::vector<size_t> &vCandidates = vRowIndices[cvRound(vL)];
 
         if (vCandidates.empty())
             continue;
 
-        // 计算描述子距离，寻找最佳和次佳匹配
+        const float minU = uL - maxD;
+        const float maxU = uL - minD;
+
+        if (maxU < 0)
+            continue;
+
+        int bestDist = ORBmatcher::TH_HIGH;
+        size_t bestIdxR = 0;
+
         const cv::Mat &dL = mDescriptors.row(iL);
-        int bestDist = INT_MAX;
-        int bestDist2 = INT_MAX; // 次佳距离，用于 Ratio Test
-        int bestIdxR = -1;
 
-        for (size_t iRc : vCandidates)
+        // 3. 在极线候选集内筛选与匹配
+        for (size_t iC = 0; iC < vCandidates.size(); iC++)
         {
-            const cv::Mat &dR = mDescriptorsRight.row(iRc);
-            const int dist = ORBmatcher::DescriptorDistance(dL, dR);
+            const size_t iR = vCandidates[iC];
+            const cv::KeyPoint &kpR = mvKeysRight[iR];
 
-            if (dist < bestDist)
+            // 金字塔层级对齐检查
+            if (kpR.octave < levelL - 1 || kpR.octave > levelL + 1)
+                continue;
+
+            const float &uR = kpR.pt.x;
+
+            if (uR >= minU && uR <= maxU)
             {
-                bestDist2 = bestDist;
-                bestDist = dist;
-                bestIdxR = iRc;
-            }
-            else if (dist < bestDist2)
-            {
-                bestDist2 = dist;
+                const cv::Mat &dR = mDescriptorsRight.row(iR);
+                const int dist = ORBmatcher::DescriptorDistance(dL, dR);
+
+                if (dist < bestDist)
+                {
+                    bestDist = dist;
+                    bestIdxR = iR;
+                }
             }
         }
 
-        // 匹配质量过滤
-        // 最佳距离必须小于阈值
-        if (bestDist > thOrbDist)
-            continue;
-        // 唯一性比率测试：最佳匹配必须明显优于次佳匹配（避免模糊匹配）
-        if (bestDist2 > 0 && static_cast<float>(bestDist) > 0.8f * static_cast<float>(bestDist2))
-            continue;
+        if (bestDist < thOrbDist)
+        {
+            // 4. 采用 5x5 滑动窗口进行 SAD 精细匹配与坐标微调
+            const cv::KeyPoint &kpR = mvKeysRight[bestIdxR];
+            const float uR0 = kpR.pt.x;
 
-        // 计算视差与深度
-        const float uR = mvKeysRight[bestIdxR].pt.x;
-        const float disparity = uL - uR; // 视差：左 x - 右 x（必须为正）
+            // 图像边界安全检查
+            const int w = 5;
+            if (uL - w < 0 || uL + w >= mImGrayLeft.cols ||
+                vL - w < 0 || vL + w >= mImGrayLeft.rows ||
+                uR0 - w < 0 || uR0 + w >= mImGrayRight.cols)
+                continue;
 
-        // 视差有效性检查
-        if (disparity <= minD || disparity >= maxD)
-            continue;
+            int bestL = 0;
+            int distSubPixelMin = INT_MAX;
+            int vIdxToCost[5] = {0};
 
-        // 深度计算：Z = (baseline * fx) / disparity
-        const float depth = mbf / disparity;
+            // 在 uR0 附近 [-2, 2] 像素范围内寻找最佳 SAD 匹配块
+            for (int incR = -2; incR <= 2; incR++)
+            {
+                int distSubPixel = 0;
+                for (int wy = -w; wy <= w; wy++)
+                {
+                    const uchar *pL = mImGrayLeft.ptr<uchar>(cvRound(vL) + wy);
+                    const uchar *pR = mImGrayRight.ptr<uchar>(cvRound(vL) + wy);
 
-        // 深度有效性检查
-        if (depth <= minZ || depth > mThDepth)
-            continue;
+                    for (int wx = -w; wx <= w; wx++)
+                    {
+                        distSubPixel += std::abs(pL[cvRound(uL) + wx] - pR[cvRound(uR0) + incR + wx]);
+                    }
+                }
 
-        // 保存结果
-        mvuRight[iL] = uR;
-        mvDepth[iL] = depth;
+                vIdxToCost[incR + 2] = distSubPixel;
+
+                if (distSubPixel < distSubPixelMin)
+                {
+                    distSubPixelMin = distSubPixel;
+                    bestL = incR;
+                }
+            }
+
+            if (bestL == -2 || bestL == 2)
+                continue;
+
+            // 5. 抛物线插值，获得亚像素精度视差 (Sub-pixel Refinement)
+            const float dist1 = vIdxToCost[bestL + 1]; // y1
+            const float dist2 = vIdxToCost[bestL + 2]; // y2 (极小值)
+            const float dist3 = vIdxToCost[bestL + 3]; // y3
+
+            // 抛物线顶点的偏移量 delta = (y1 - y3) / (2 * (y1 + y3 - 2*y2))
+            const float delta = (dist1 - dist3) / (2.0f * (dist1 + dist3 - 2.0f * dist2));
+
+            if (delta < -1.0f || delta > 1.0f)
+                continue;
+
+            float bestuR = uR0 + bestL + delta;
+            float disparity = uL - bestuR;
+
+            if (disparity >= minD && disparity < maxD)
+            {
+                if (disparity <= 0)
+                    disparity = 0.01f;
+
+                // 计算深度并更新帧变量
+                mvDepth[iL] = mbf / disparity;
+                mvuRight[iL] = bestuR;
+            }
+        }
     }
 }
 

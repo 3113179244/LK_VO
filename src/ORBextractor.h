@@ -56,7 +56,7 @@ public:
                     std::vector<cv::KeyPoint>& keypoints,
                     cv::OutputArray descriptors);
 
-    // ================= Getters 接口 =================
+    // Getters 接口
     int GetLevels() const { return nlevels; }
     float GetScaleFactor() const { return scaleFactor; }
     const std::vector<float>& GetScaleFactors() const { return mvScaleFactor; }

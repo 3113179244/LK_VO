@@ -15,6 +15,7 @@ class Tracker;
 class Viewer;
 class ORBVocabulary;
 class FrameDrawer;
+class LocalMapping;
 class System
 {
 public:
@@ -48,7 +49,7 @@ private:
     std::shared_ptr<Map> mpMap;
     std::shared_ptr<Tracker> mpTracker;
     std::shared_ptr<Viewer> mpViewer;
-
+    std::shared_ptr<LocalMapping> mpLocalMapper;
     // 可视化与后台线程句柄
     std::thread *mpViewerThread;
     std::shared_ptr<FrameDrawer> mpFrameDrawer;

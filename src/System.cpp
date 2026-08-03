@@ -4,6 +4,7 @@
 #include "Tracker.h"
 #include "Viewer.h"
 #include "FrameDrawer.h"
+#include "LocalMapping.h"
 System::System(const std::string &strConfigFile, const eSensor sensor, const bool bUseViewer)
     : mSensor(sensor), mpViewerThread(nullptr)
 {
@@ -22,6 +23,9 @@ System::System(const std::string &strConfigFile, const eSensor sensor, const boo
     // 初始化前端 Tracker
     mpTracker = std::make_shared<Tracker>(this, mpMap, mSensor);
     mpTracker->SetFrameDrawer(mpFrameDrawer);
+    mpLocalMapper = std::make_shared<LocalMapping>(this, mpMap);
+    mpTracker->SetLocalMapper(mpLocalMapper.get());             
+    mpLocalMapper->SetTracker(mpTracker.get());
     // 如果开启 Viewer 模式，启动 Pangolin 可视化线程
     if (bUseViewer)
     {

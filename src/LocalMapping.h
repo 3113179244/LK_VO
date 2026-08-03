@@ -53,7 +53,7 @@ private:
     // 待处理的关键帧队列及互斥锁
     std::list<KeyFrame*> mlNewKeyFrames;
     std::mutex mMutexNewKeyBase;
-
+    
     // 当前正在处理的关键帧与最近新增的地图点列表
     KeyFrame* mpCurrentKeyFrame;
     std::list<MapPoint*> mlpRecentAddedMapPoints;

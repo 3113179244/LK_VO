@@ -3,7 +3,8 @@
 #include <limits>
 #include "ORBextractor.h"
 #include <algorithm>
-
+#include "KeyFrame.h"   
+#include "MapPoint.h"
 // 初始化静态成员变量
 const int ORBmatcher::TH_HIGH = 100;
 const int ORBmatcher::TH_LOW = 50;
@@ -208,4 +209,11 @@ int ORBmatcher::SearchByProjection(Frame &CurrentFrame, const Frame &LastFrame, 
     (void)th;
     (void)bMono;
     return 30; 
+}
+
+int ORBmatcher::SearchByBoW(KeyFrame *pKF, Frame &F, std::vector<MapPoint*> &vpMapPointMatches)
+{
+    (void)pKF;
+    vpMapPointMatches = std::vector<MapPoint*>(F.N, static_cast<MapPoint*>(nullptr));
+    return 0; // 暂无匹配，跳过参考关键帧跟踪步骤
 }

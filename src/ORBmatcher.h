@@ -4,8 +4,9 @@
 #include <vector>
 #include <opencv2/opencv.hpp>
 
-class Frame; // 前置声明 Frame 帧类，避免包含头文件引发循环依赖
-
+class Frame; 
+class KeyFrame;
+class MapPoint;
 /**
  * @brief ORB 特征匹配器
  * 用于在双目图像之间或连续帧之间进行 ORB 特征点的匹配
@@ -39,7 +40,14 @@ public:
     int ComputeStereoMatches(Frame &F);
 
     int SearchByProjection(Frame &CurrentFrame, const Frame &LastFrame, const float th, const bool bMono = false);
-    
+    /**
+     * @brief 通过词袋 (BoW) 匹配 KeyFrame 与 Frame 中的特征点
+     * @param pKF 关键帧指针
+     * @param F 当前帧
+     * @param vpMapPointMatches 匹配到的地图点输出数组
+     * @return 成功匹配的数量
+     */
+    int SearchByBoW(KeyFrame *pKF, Frame &F, std::vector<MapPoint*> &vpMapPointMatches);
     static const int TH_LOW;       // 匹配距离较低阈值，用于要求较高的匹配场景（如非连续帧或宽基线）
     static const int TH_HIGH;      // 匹配距离较高阈值，用于要求较宽松的场景（如连续帧追踪）
     static const int HISTO_LENGTH; // 方向直方图的 Bin 数量 (通常为 36 个 bin，每 10 度划分一个)

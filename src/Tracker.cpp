@@ -215,19 +215,181 @@ bool Tracker::TrackWithMotionModel()
 
 bool Tracker::TrackReferenceKeyFrame()
 {
-    // 上一帧速度不适用时，假设当前位姿继承上一帧 Tcw
+    // 1. 假设初值继承上一帧位姿
     mCurrentFrame.SetPose(mLastFrame.mTcw);
 
-    // 利用词袋（BoW）找当前帧与参考关键帧 mpReferenceKF 的特征对应项
-    // 通过 PoseOptimization 求解当前位姿
-    return true;
+    // 2. 清空当前帧关联的地图点
+    mCurrentFrame.mvpMapPoints = std::vector<MapPoint*>(mCurrentFrame.N, static_cast<MapPoint*>(nullptr));
+
+    if (!mpReferenceKF)
+        return false;
+
+    // 3. 通过词袋模型 (BoW) 或描述子匹配参考关键帧与当前帧特征点
+    ORBmatcher matcher(0.7, true);
+    std::vector<MapPoint*> vpMapPointMatches;
+    
+    // 搜索参考关键帧 mpReferenceKF 在当前帧中的匹配点
+    int nmatches = matcher.SearchByBoW(mpReferenceKF, mCurrentFrame, vpMapPointMatches);
+
+    if (nmatches < 15)
+        return false;
+
+    // 将匹配到的 MapPoints 赋值给当前帧
+    for (int i = 0; i < mCurrentFrame.N; i++)
+    {
+        if (vpMapPointMatches[i])
+        {
+            mCurrentFrame.mvpMapPoints[i] = vpMapPointMatches[i];
+        }
+    }
+
+    // 4. 位姿优化 (Motion-Only BA)
+    int nInliers = MotionOnlyBA::Optimize(&mCurrentFrame);
+
+    // 5. 剔除外点
+    for (int i = 0; i < mCurrentFrame.N; i++)
+    {
+        if (mCurrentFrame.mvpMapPoints[i] && mCurrentFrame.mvbOutlier[i])
+        {
+            mCurrentFrame.mvpMapPoints[i] = static_cast<MapPoint*>(nullptr);
+            mCurrentFrame.mvbOutlier[i] = false;
+        }
+    }
+
+    mnMatchesInliers = nInliers;
+
+    return nInliers >= 10;
 }
 
 bool Tracker::TrackLocalMap()
 {
-    // 搜集共视图（Covisibility Graph）相连的 Local KeyFrames 与 Local MapPoints
-    // 将 Local MapPoints 投影到当前帧筛选并更新匹配，最后再调用一次 BA 优化 (Optimizer::PoseOptimization)
-    return true;
+    // 1. 搜集局部地图关键帧 (Local KeyFrames)
+    std::vector<KeyFrame*> vpLocalKeyFrames;
+    
+    // 将当前匹配点对应的 KeyFrame 以及共视 KeyFrames 放入局部关键帧列表
+    for (int i = 0; i < mCurrentFrame.N; i++)
+    {
+        if (mCurrentFrame.mvpMapPoints[i])
+        {
+            MapPoint* pMP = mCurrentFrame.mvpMapPoints[i];
+            if (!pMP->isBad())
+            {
+                const std::map<KeyFrame*, size_t> observations = pMP->GetObservations();
+                for (auto mit = observations.begin(); mit != observations.end(); mit++)
+                {
+                    vpLocalKeyFrames.push_back(mit->first);
+                }
+            }
+        }
+    }
+
+    if (vpLocalKeyFrames.empty())
+        return false;
+
+    // 2. 搜集局部地图点 (Local MapPoints) 并剔除已匹配的点
+    std::vector<MapPoint*> vpLocalMapPoints;
+    for (KeyFrame* pKF : vpLocalKeyFrames)
+    {
+        std::vector<MapPoint*> vpMPs = pKF->GetMapPointMatches();
+        for (MapPoint* pMP : vpMPs)
+        {
+            if (!pMP || pMP->isBad()) continue;
+            // 避免重复添加
+            if (std::find(vpLocalMapPoints.begin(), vpLocalMapPoints.end(), pMP) == vpLocalMapPoints.end())
+            {
+                vpLocalMapPoints.push_back(pMP);
+            }
+        }
+    }
+
+    // 3. 将局部地图点投影到当前帧进行二次匹配
+    ORBmatcher matcher(0.8, true);
+    int nMatches = 0;
+
+    for (MapPoint* pMP : vpLocalMapPoints)
+    {
+        if (pMP->isBad()) continue;
+
+        // 检查该地图点是否已在当前帧匹配过
+        bool bAlreadyFound = false;
+        for (int i = 0; i < mCurrentFrame.N; i++)
+        {
+            if (mCurrentFrame.mvpMapPoints[i] == pMP)
+            {
+                bAlreadyFound = true;
+                break;
+            }
+        }
+
+        if (bAlreadyFound) continue;
+
+        // 将地图点投影到当前帧像素平面
+        Eigen::Vector3f P_w = pMP->GetWorldPos();
+        Eigen::Vector3f P_c = mCurrentFrame.GetRotationInverse().transpose() * P_w + mCurrentFrame.mTcw.block<3,1>(0,3);
+
+        if (P_c[2] <= 0) continue; // 剔除相机后方的点
+
+        // 计算投影像素坐标
+        float u = Frame::fx * P_c[0] / P_c[2] + Frame::cx;
+        float v = Frame::fy * P_c[1] / P_c[2] + Frame::cy;
+
+        if (u < Frame::mnMinX || u > Frame::mnMaxX || v < Frame::mnMinY || v > Frame::mnMaxY)
+            continue;
+
+        // 在投影区域 (半径 5~10 像素) 内查找的最佳描述子点
+        std::vector<size_t> vIndices = mCurrentFrame.GetFeaturesInArea(u, v, 5.0f);
+        if (vIndices.empty()) continue;
+
+        int bestDist = 255;
+        int bestIdx = -1;
+
+        for (size_t idx : vIndices)
+        {
+            if (mCurrentFrame.mvpMapPoints[idx]) continue; // 该像素特征点已有匹配
+
+            // 比对描述子距离
+            cv::Mat dMP = pMP->GetDescriptor();
+            cv::Mat dFrame = mCurrentFrame.mDescriptors.row(idx);
+            int dist = ORBmatcher::DescriptorDistance(dMP, dFrame);
+
+            if (dist < bestDist)
+            {
+                bestDist = dist;
+                bestIdx = idx;
+            }
+        }
+
+        // 若匹配质量达标则建立关联
+        if (bestDist < ORBmatcher::TH_HIGH && bestIdx >= 0)
+        {
+            mCurrentFrame.mvpMapPoints[bestIdx] = pMP;
+            nMatches++;
+        }
+    }
+
+    // 4. 第二次精细位姿优化 (Motion-Only BA)
+    int nInliers = MotionOnlyBA::Optimize(&mCurrentFrame);
+
+    // 5. 更新内点标记并统计
+    mnMatchesInliers = 0;
+    for (int i = 0; i < mCurrentFrame.N; i++)
+    {
+        if (mCurrentFrame.mvpMapPoints[i])
+        {
+            if (mCurrentFrame.mvbOutlier[i])
+            {
+                mCurrentFrame.mvpMapPoints[i] = static_cast<MapPoint*>(nullptr);
+                mCurrentFrame.mvbOutlier[i] = false;
+            }
+            else
+            {
+                mnMatchesInliers++;
+            }
+        }
+    }
+
+    // 局部地图跟踪成功的最低内点门槛
+    return mnMatchesInliers >= 30;
 }
 
 bool Tracker::NeedNewKeyFrame()

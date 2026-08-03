@@ -3,7 +3,7 @@
 #include "MapPoint.h"
 #include <algorithm>
 #include "ORBextractor.h"
-
+#include "Map.h"
 // 静态变量初始化：保证每个关键帧生成的 ID 全局唯一递增
 long unsigned int KeyFrame::nNextId = 0;
 
@@ -259,4 +259,67 @@ MapPoint* KeyFrame::GetMapPoint(const size_t &idx)
 {
     std::unique_lock<std::mutex> lock(mMutexFeatures);
     return mvpMapPoints[idx];
+}
+
+void KeyFrame::SetBadFlag()
+{
+    {
+        std::unique_lock<std::mutex> lock(mMutexConnections);
+        if (mbBad)
+            return;
+        mbBad = true;
+    }
+
+    // 1. 断开与所有相连关键帧的双向共视连接
+    for (auto mit = mConnectedKeyFrameWeights.begin(); mit != mConnectedKeyFrameWeights.end(); mit++)
+    {
+        mit->first->EraseConnection(this);
+    }
+
+    // 2. 解除所有关联地图点对该关键帧的观测引用
+    for (size_t i = 0; i < mvpMapPoints.size(); i++)
+    {
+        if (mvpMapPoints[i])
+        {
+            mvpMapPoints[i]->EraseObservation(this);
+        }
+    }
+
+    // 3. 清空自身的连接记录
+    {
+        std::unique_lock<std::mutex> lock(mMutexConnections);
+        mConnectedKeyFrameWeights.clear();
+        mvpOrderedConnectedKeyFrames.clear();
+    }
+
+    // 4. 从全局地图中删除自身
+    mpMap->EraseKeyFrame(this);
+}
+
+void KeyFrame::EraseConnection(KeyFrame *pKF)
+{
+    bool bUpdate = false;
+    {
+        std::unique_lock<std::mutex> lock(mMutexConnections);
+        if (mConnectedKeyFrameWeights.count(pKF))
+        {
+            mConnectedKeyFrameWeights.erase(pKF);
+            bUpdate = true;
+        }
+    }
+
+    if (bUpdate)
+        UpdateBestCovisibles();
+}
+
+std::vector<KeyFrame*> KeyFrame::GetConnectedKeyFrames()
+{
+    std::unique_lock<std::mutex> lock(mMutexConnections);
+    std::vector<KeyFrame*> vKF;
+    vKF.reserve(mConnectedKeyFrameWeights.size());
+    for (auto mit = mConnectedKeyFrameWeights.begin(); mit != mConnectedKeyFrameWeights.end(); mit++)
+    {
+        vKF.push_back(mit->first);
+    }
+    return vKF;
 }

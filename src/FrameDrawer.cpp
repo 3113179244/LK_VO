@@ -22,7 +22,7 @@ cv::Mat FrameDrawer::DrawFrame()
     std::vector<bool> vbVO, vbMap;
     int state;
 
-    // 1. 加锁拷贝数据：防止在绘制过程中 Tracker 线程修改数据造成数据竞态
+    // 加锁拷贝数据：防止在绘制过程中 Tracker 线程修改数据造成数据竞态
     {
         std::unique_lock<std::mutex> lock(mMutex);
         state = mState;
@@ -56,7 +56,7 @@ cv::Mat FrameDrawer::DrawFrame()
         cv::cvtColor(im, im, cv::COLOR_GRAY2BGR);
     }
 
-    // 2. 图像绘制逻辑
+    // 图像绘制逻辑
     
     // 状态 A: 未初始化阶段（单目初始化过程，绘制两帧特征点间的连线/光流轨迹）
     if (state == Tracker::NOT_INITIALIZED)

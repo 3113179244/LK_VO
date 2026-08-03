@@ -288,3 +288,9 @@ int MapPoint::GetIndexInKeyFrame(KeyFrame* pKF)
     }
     return -1;
 }
+
+float MapPoint::GetFoundRatio()
+{
+    std::unique_lock<std::mutex> lock(mMutexFeatures);
+    return static_cast<float>(mnFound) / static_cast<float>(mnVisible);
+}

@@ -70,7 +70,7 @@ public:
     // 词袋模型 (Bag of Words)
     // 计算当前关键帧的词袋向量，用于重定位和闭环检测
     void ComputeBoW();
-
+    void SetBadFlag();
     // 基础标识与时间戳
     static long unsigned int nNextId;  // 静态全局变量，用于生成下一个关键帧的唯一ID
     long unsigned int mnId;            // 当前关键帧的唯一ID

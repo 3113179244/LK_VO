@@ -45,6 +45,7 @@ add_library(${PROJECT_NAME}_lib
   src/Tracker.cpp
   src/Viewer.cpp
   src/FrameDrawer.cpp
+  src/LocalMapping.cpp
 )
 
 target_link_libraries(${PROJECT_NAME}_lib

@@ -15,6 +15,7 @@ class ORBextractor;
 class KeyFrame;
 class ORBmatcher;
 class MotionOnlyBA;
+class LocalMapping;
 
 class Tracker
 {
@@ -32,7 +33,7 @@ public:
     void SetFrameDrawer(std::shared_ptr<FrameDrawer> pFrameDrawer) { mpFrameDrawer = pFrameDrawer; }
     // 图像数据Grab接口
     Eigen::Matrix4f GrabImageStereo(const cv::Mat &imRectLeft, const cv::Mat &imRectRight, const double &timestamp);
-
+    void SetLocalMapper(LocalMapping *pLocalMapper) { mpLocalMapper = pLocalMapper; }
     void SetViewer(std::shared_ptr<Viewer> pViewer) { mpViewer = pViewer; }
     void Reset();
 
@@ -54,6 +55,7 @@ private:
     std::shared_ptr<Map> mpMap;
     std::shared_ptr<Viewer> mpViewer;
 
+    LocalMapping *mpLocalMapper;
     // 特征提取器指针 (双目需要左右各一个 extractor)
     std::unique_ptr<ORBextractor> mpORBextractorLeft;
     std::unique_ptr<ORBextractor> mpORBextractorRight;

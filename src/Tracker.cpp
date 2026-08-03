@@ -10,9 +10,9 @@
 #include <iostream>
 #include "ORBmatcher.h"
 #include "MotionOnlyBA.h"
-
+#include "LocalMapping.h"
 Tracker::Tracker(System *pSys, std::shared_ptr<Map> pMap, int sensor)
-    : mpSystem(pSys), mpMap(pMap), mState(NO_IMAGES_YET), mVelocity(Eigen::Matrix4f::Identity()), mpReferenceKF(nullptr)
+    : mpSystem(pSys), mpMap(pMap), mState(NO_IMAGES_YET), mVelocity(Eigen::Matrix4f::Identity()), mpReferenceKF(nullptr), mpLocalMapper(nullptr)
 {
     // 从 Config 类中加载 ORB 提取器参数
     int nFeatures = Config::g_nORBnFeatures;
@@ -216,11 +216,59 @@ bool Tracker::TrackLocalMap()
 
 bool Tracker::NeedNewKeyFrame()
 {
-    // 关键帧插入策略约束：
-    // 1. 距离上一次插入关键帧经过了足够的帧数
-    // 2. 当前帧追踪到的地图点内点比例低于参考关键帧一定百分比（如 < 90%）
-    // 3. Local Mapping 处于空闲状态
-    return (mCurrentFrame.mnId - mnLastKeyFrameId > 20);
+    bool bLocalMappingIdle = mpLocalMapper->SetNotStop();
+
+    // 2. 统计当前帧跟踪到的有效地图点 (Inliers)
+    int nMinMatches = 15;
+    if (mnMatchesInliers < nMinMatches)
+        return false; // 跟踪到的点太少，位姿可能不可靠，不建帧
+
+    // 3. 计算参考关键帧中被跟踪到的地图点数量
+    int nRefMatches = 0;
+    if (mpReferenceKF)
+    {
+        // 统计参考关键帧中有效的地图点总数
+        std::vector<MapPoint *> vpRefMPs = mpReferenceKF->GetMapPointMatches();
+        for (size_t i = 0; i < vpRefMPs.size(); i++)
+        {
+            if (vpRefMPs[i] && !vpRefMPs[i]->isBad())
+                nRefMatches++;
+        }
+    }
+
+    // 4. 判断时间/帧数间隔条件
+    const bool c1a = mCurrentFrame.mnId >= mnLastKeyFrameId + 20; // 距离上一关键帧已过去 20 帧以上 (强制插入)
+    const bool c1b = mCurrentFrame.mnId >= mnLastKeyFrameId + 2;  // 至少间隔 2 帧以上 (防止过度密集)
+
+    // 5. 判断视角变化/地图点重复度条件
+    // 如果当前帧跟踪到的地图点数低于参考关键帧的 90%，说明观测到了较多新场景，需要插入关键帧
+    bool c2 = false;
+    if (nRefMatches > 0)
+    {
+        float ratioMatches = static_cast<float>(mnMatchesInliers) / static_cast<float>(nRefMatches);
+        c2 = ratioMatches < 0.90f;
+    }
+
+    // 6. 双目/RGBD 特有逻辑：统计当前帧中的近点 (Close MapPoints) 数量
+    // 即使共视比例较高，若新增了足够多的视觉近点，也需要及时插入以提供好的三角化基线
+    int nNonTrackedClose = 0;
+    for (int i = 0; i < mCurrentFrame.N; i++)
+    {
+        if (mCurrentFrame.mvDepth[i] > 0 && mCurrentFrame.mvDepth[i] < mCurrentFrame.mThDepth)
+        {
+            if (!mCurrentFrame.mvpMapPoints[i] || mCurrentFrame.mvbOutlier[i])
+                nNonTrackedClose++;
+        }
+    }
+    bool c3 = (nNonTrackedClose > 100); // 发现大量未被跟踪的新近点
+
+    // 7. 综合决策逻辑
+    if ((c1a || (c1b && c2) || c3) && bLocalMappingIdle)
+    {
+        return true;
+    }
+
+    return false;
 }
 
 void Tracker::CreateNewKeyFrame()

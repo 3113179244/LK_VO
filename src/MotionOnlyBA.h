@@ -1,7 +1,7 @@
 #ifndef MOTIONONLYBA_H
 #define MOTIONONLYBA_H
 
-class Frame; // 前置声明
+class Frame;
 
 class MotionOnlyBA
 {

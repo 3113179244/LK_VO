@@ -1,8 +1,13 @@
+// Header File: MotionOnlyBA.h
 #ifndef MOTIONONLYBA_H
 #define MOTIONONLYBA_H
 
+// 前向声明 Frame 类
 class Frame;
 
+/**
+ * @brief 位姿优化类（仅优化相机运动/位姿，不优化地图点）
+ */
 class MotionOnlyBA
 {
 public:

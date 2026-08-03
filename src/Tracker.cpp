@@ -78,19 +78,19 @@ void Tracker::Track()
     // 阶段 B: 正常跟踪状态 -> 估计姿态
     bool bOK = false;
 
-    // 1. 优先尝试恒速模型跟踪 (Velocity Model)
+    // 优先尝试恒速模型跟踪 (Velocity Model)
     if (!mVelocity.isIdentity() && mLastFrame.mnId == mCurrentFrame.mnId - 1)
     {
         bOK = TrackWithMotionModel();
     }
 
-    // 2. 若运动模型失效，回退到参考关键帧跟踪
+    // 若运动模型失效，回退到参考关键帧跟踪
     if (!bOK)
     {
         bOK = TrackReferenceKeyFrame();
     }
 
-    // 3. 跟踪局部地图进行位姿精确优化
+    // 跟踪局部地图进行位姿精确优化
     if (bOK)
     {
         bOK = TrackLocalMap();
@@ -154,13 +154,13 @@ bool Tracker::StereoInitialization()
 
 bool Tracker::TrackWithMotionModel()
 {
-    // 1. 根据恒速模型粗略预测当前位姿: T_cw = V * T_lw
+    // 根据恒速模型粗略预测当前位姿: T_cw = V * T_lw
     mCurrentFrame.SetPose(mVelocity * mLastFrame.mTcw);
 
-    // 2. 清空当前帧的地图点指针数组
+    // 清空当前帧的地图点指针数组
     mCurrentFrame.mvpMapPoints = std::vector<MapPoint *>(mCurrentFrame.N, static_cast<MapPoint *>(nullptr));
 
-    // 3. 利用投影建立上一帧地图点与当前帧特征点的匹配
+    // 利用投影建立上一帧地图点与当前帧特征点的匹配
     ORBmatcher matcher(0.9, true);
     int nmatches = matcher.SearchByProjection(mCurrentFrame, mLastFrame, 15); // 搜索半径阈值设为15
 
@@ -174,10 +174,10 @@ bool Tracker::TrackWithMotionModel()
     if (nmatches < 20)
         return false;
 
-    // 4. 只优化当前帧位姿 (Pose Optimization / Motion-only BA)
+    // 只优化当前帧位姿 (Pose Optimization / Motion-only BA)
     int nInliers = MotionOnlyBA::Optimize(&mCurrentFrame);
 
-    // 5. 剔除优化时被判定为外点的匹配
+    // 剔除优化时被判定为外点的匹配
     for (int i = 0; i < mCurrentFrame.N; i++)
     {
         if (mCurrentFrame.mvpMapPoints[i])
@@ -193,7 +193,7 @@ bool Tracker::TrackWithMotionModel()
 
     mnMatchesInliers = nInliers;
 
-    // 6. 内点数满足要求则跟踪成功
+    // 内点数满足要求则跟踪成功
     return (nInliers >= 10);
 }
 
@@ -218,12 +218,12 @@ bool Tracker::NeedNewKeyFrame()
 {
     bool bLocalMappingIdle = mpLocalMapper->SetNotStop();
 
-    // 2. 统计当前帧跟踪到的有效地图点 (Inliers)
+    // 统计当前帧跟踪到的有效地图点 (Inliers)
     int nMinMatches = 15;
     if (mnMatchesInliers < nMinMatches)
         return false; // 跟踪到的点太少，位姿可能不可靠，不建帧
 
-    // 3. 计算参考关键帧中被跟踪到的地图点数量
+    // 计算参考关键帧中被跟踪到的地图点数量
     int nRefMatches = 0;
     if (mpReferenceKF)
     {
@@ -236,11 +236,11 @@ bool Tracker::NeedNewKeyFrame()
         }
     }
 
-    // 4. 判断时间/帧数间隔条件
+    // 判断时间/帧数间隔条件
     const bool c1a = mCurrentFrame.mnId >= mnLastKeyFrameId + 20; // 距离上一关键帧已过去 20 帧以上 (强制插入)
     const bool c1b = mCurrentFrame.mnId >= mnLastKeyFrameId + 2;  // 至少间隔 2 帧以上 (防止过度密集)
 
-    // 5. 判断视角变化/地图点重复度条件
+    // 判断视角变化/地图点重复度条件
     // 如果当前帧跟踪到的地图点数低于参考关键帧的 90%，说明观测到了较多新场景，需要插入关键帧
     bool c2 = false;
     if (nRefMatches > 0)
@@ -249,7 +249,6 @@ bool Tracker::NeedNewKeyFrame()
         c2 = ratioMatches < 0.90f;
     }
 
-    // 6. 双目/RGBD 特有逻辑：统计当前帧中的近点 (Close MapPoints) 数量
     // 即使共视比例较高，若新增了足够多的视觉近点，也需要及时插入以提供好的三角化基线
     int nNonTrackedClose = 0;
     for (int i = 0; i < mCurrentFrame.N; i++)
@@ -262,7 +261,7 @@ bool Tracker::NeedNewKeyFrame()
     }
     bool c3 = (nNonTrackedClose > 100); // 发现大量未被跟踪的新近点
 
-    // 7. 综合决策逻辑
+    // 综合决策逻辑
     if ((c1a || (c1b && c2) || c3) && bLocalMappingIdle)
     {
         return true;

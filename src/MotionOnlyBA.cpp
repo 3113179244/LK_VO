@@ -26,31 +26,31 @@ struct ReprojectionError
     template <typename T>
     bool operator()(const T *const se3, T *residuals) const
     {
-        // 1. 将 3D 点坐标转为 Ceres 的 Jet/双精度类型
+        // 将 3D 点坐标转为 Ceres 的 Jet/双精度类型
         T p_w[3] = {T(point_3d_[0]), T(point_3d_[1]), T(point_3d_[2])};
         T p_c[3];
 
-        // 2. 使用旋转向量对世界坐标系下的点进行旋转: p_c = R * p_w
+        // 使用旋转向量对世界坐标系下的点进行旋转: p_c = R * p_w
         ceres::AngleAxisRotatePoint(se3, p_w, p_c);
 
-        // 3. 加上平移向量: p_c = R * p_w + t
+        // 加上平移向量: p_c = R * p_w + t
         p_c[0] += se3[3];
         p_c[1] += se3[4];
         p_c[2] += se3[5];
 
-        // 4. 归一化平面坐标转换
+        // 归一化平面坐标转换
         T x = p_c[0] / p_c[2];
         T y = p_c[1] / p_c[2];
 
-        // 5. 获取内参参数 (fx, fy, cx, cy)
+        // 获取内参参数 (fx, fy, cx, cy)
         T fx = T(K_(0, 0)), fy = T(K_(1, 1));
         T cx = T(K_(0, 2)), cy = T(K_(1, 2));
 
-        // 6. 计算投影后的像素坐标
+        // 计算投影后的像素坐标
         T u = fx * x + cx;
         T v = fy * y + cy;
 
-        // 7. 计算观测值与预测投影值之间的重投影残差
+        // 计算观测值与预测投影值之间的重投影残差
         residuals[0] = u - T(observed_[0]);
         residuals[1] = v - T(observed_[1]);
 

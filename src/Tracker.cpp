@@ -30,6 +30,7 @@ Tracker::~Tracker() {}
 
 Eigen::Matrix4f Tracker::GrabImageStereo(const cv::Mat &imRectLeft, const cv::Mat &imRectRight, const double &timestamp)
 {
+    imRectLeft.copyTo(mImGray);
     // 构建内参矩阵与畸变矩阵
     cv::Mat K = (cv::Mat_<float>(3, 3) << Config::g_dFx, 0, Config::g_dCx,
                  0, Config::g_dFy, Config::g_dCy,
@@ -72,44 +73,46 @@ void Tracker::Track()
         {
             mState = OK;
         }
-        return;
     }
-
-    // 阶段 B: 正常跟踪状态 -> 估计姿态
-    bool bOK = false;
-
-    // 优先尝试恒速模型跟踪 (Velocity Model)
-    if (!mVelocity.isIdentity() && mLastFrame.mnId == mCurrentFrame.mnId - 1)
-    {
-        bOK = TrackWithMotionModel();
-    }
-
-    // 若运动模型失效，回退到参考关键帧跟踪
-    if (!bOK)
-    {
-        bOK = TrackReferenceKeyFrame();
-    }
-
-    // 跟踪局部地图进行位姿精确优化
-    if (bOK)
-    {
-        bOK = TrackLocalMap();
-    }
-
-    if (bOK)
-    {
-        mState = OK;
-        mVelocity = mCurrentFrame.mTcw * mLastFrame.mTcw.inverse();
-        if (NeedNewKeyFrame())
-        {
-            CreateNewKeyFrame();
-        }
-    }
+    // 阶段 B: 正常跟踪状态 -> 估计姿态 
     else
     {
-        mState = LOST;
+        bool bOK = false;
+
+        // 优先尝试恒速模型跟踪 (Velocity Model)
+        if (!mVelocity.isIdentity() && mLastFrame.mnId == mCurrentFrame.mnId - 1)
+        {
+            bOK = TrackWithMotionModel();
+        }
+
+        // 若运动模型失效，回退到参考关键帧跟踪
+        if (!bOK)
+        {
+            bOK = TrackReferenceKeyFrame();
+        }
+
+        // 跟踪局部地图进行位姿精确优化
+        if (bOK)
+        {
+            bOK = TrackLocalMap();
+        }
+
+        if (bOK)
+        {
+            mState = OK;
+            mVelocity = mCurrentFrame.mTcw * mLastFrame.mTcw.inverse();
+            if (NeedNewKeyFrame())
+            {
+                CreateNewKeyFrame();
+            }
+        }
+        else
+        {
+            mState = LOST;
+        }
+        mLastFrame = Frame(mCurrentFrame);
     }
-    mLastFrame = Frame(mCurrentFrame);
+
     if (mpFrameDrawer)
     {
         mpFrameDrawer->Update(this);
@@ -121,29 +124,42 @@ bool Tracker::StereoInitialization()
     if (mCurrentFrame.N < 500)
         return false;
 
+    // 设置世界坐标系原点
     mCurrentFrame.SetPose(Eigen::Matrix4f::Identity());
 
     // 创建第一帧对应的 KeyFrame 并加入 Map
     KeyFrame *pKFinit = new KeyFrame(mCurrentFrame, mpMap.get());
     mpMap->AddKeyFrame(pKFinit);
 
-    // 为当前帧所有有效的双目特征点反投影生成 MapPoint
+    // 地图点筛选与创建
     for (int i = 0; i < mCurrentFrame.N; i++)
     {
         float z = mCurrentFrame.mvDepth[i];
-        if (z > 0)
+        
+        // 筛选条件：深度必须大于 0 且小于近点阈值 (mThDepth)
+        if (z > 0 && z < mCurrentFrame.mThDepth)
         {
             Eigen::Vector3f p3D = mCurrentFrame.UnprojectStereo(i);
             MapPoint *pMP = new MapPoint(p3D, pKFinit, mpMap.get());
 
+            // 建立 KeyFrame 和 MapPoint 的双向绑定
             pMP->AddObservation(pKFinit, i);
             pKFinit->AddMapPoint(pMP, i);
+
+            // 更新点属性（法线、金字塔深度范围、最佳描述子）
             pMP->ComputeDistinctiveDescriptor();
             pMP->UpdateNormalAndDepth();
 
+            // 加入全局地图
             mpMap->AddMapPoint(pMP);
             mCurrentFrame.mvpMapPoints[i] = pMP;
         }
+    }
+
+    // 关键帧插入后台：将初始化关键帧推送到 LocalMapping 线程
+    if (mpLocalMapper)
+    {
+        mpLocalMapper->InsertKeyFrame(pKFinit);
     }
 
     mpReferenceKF = pKFinit;
@@ -272,8 +288,46 @@ bool Tracker::NeedNewKeyFrame()
 
 void Tracker::CreateNewKeyFrame()
 {
+    // 创建新关键帧
     KeyFrame *pKF = new KeyFrame(mCurrentFrame, mpMap.get());
-    mpMap->AddKeyFrame(pKF);
+
+    // 遍历当前帧特征点：为新增的未跟踪点创建 MapPoint，为已跟踪点追加 Observation
+    for (int i = 0; i < mCurrentFrame.N; i++)
+    {
+        MapPoint* pMP = mCurrentFrame.mvpMapPoints[i];
+
+        if (!pMP)
+        {
+            // 筛选新增点：深度在有效范围 [0, mThDepth] 内
+            float z = mCurrentFrame.mvDepth[i];
+            if (z > 0 && z < mCurrentFrame.mThDepth)
+            {
+                Eigen::Vector3f p3D = mCurrentFrame.UnprojectStereo(i);
+                MapPoint *pNewMP = new MapPoint(p3D, pKF, mpMap.get());
+
+                pNewMP->AddObservation(pKF, i);
+                pKF->AddMapPoint(pNewMP, i);
+
+                pNewMP->ComputeDistinctiveDescriptor();
+                pNewMP->UpdateNormalAndDepth();
+
+                mpMap->AddMapPoint(pNewMP);
+                mCurrentFrame.mvpMapPoints[i] = pNewMP;
+            }
+        }
+        else if (!mCurrentFrame.mvbOutlier[i])
+        {
+            // 如果点已被跟踪，只需更新双向引用关系
+            pMP->AddObservation(pKF, i);
+            pKF->AddMapPoint(pMP, i);
+        }
+    }
+
+    if (mpLocalMapper)
+    {
+        mpLocalMapper->InsertKeyFrame(pKF);
+    }
+
     mpReferenceKF = pKF;
     mnLastKeyFrameId = mCurrentFrame.mnId;
 }

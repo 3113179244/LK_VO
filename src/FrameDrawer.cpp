@@ -22,16 +22,15 @@ cv::Mat FrameDrawer::DrawFrame()
     std::vector<bool> vbVO, vbMap;
     int state;
 
-    // 加锁拷贝数据：防止在绘制过程中 Tracker 线程修改数据造成数据竞态
+    // 加锁拷贝数据
     {
         std::unique_lock<std::mutex> lock(mMutex);
         state = mState;
         if (mState == Tracker::SYSTEM_NOT_READY)
             mState = Tracker::NO_IMAGES_YET;
 
-        mIm.copyTo(im); // 深拷贝当前帧图像
+        mIm.copyTo(im);
 
-        // 根据不同状态，提取相应的局部特征和匹配数据
         if (mState == Tracker::NOT_INITIALIZED)
         {
             vCurrentKeys = mvCurrentKeys;
@@ -48,63 +47,60 @@ cv::Mat FrameDrawer::DrawFrame()
         {
             vCurrentKeys = mvCurrentKeys;
         }
-    } // 自动解锁
+    }
 
-    // 若原图为单通道灰度图，需转换为三通道 BGR 彩色图以便绘制彩色线和方框
     if (im.channels() < 3)
     {
         cv::cvtColor(im, im, cv::COLOR_GRAY2BGR);
     }
 
     // 图像绘制逻辑
-    
-    // 状态 A: 未初始化阶段（单目初始化过程，绘制两帧特征点间的连线/光流轨迹）
     if (state == Tracker::NOT_INITIALIZED)
     {
         for (unsigned int i = 0; i < vMatches.size(); i++)
         {
-            if (vMatches[i] >= 0) // 有有效匹配
+            if (vMatches[i] >= 0)
             {
-                // 连接初始化初始帧点与当前帧点（绿色线）
                 cv::line(im, vIniKeys[i].pt, vCurrentKeys[vMatches[i]].pt, cv::Scalar(0, 255, 0));
             }
         }
     }
-    // 状态 B: 跟踪正常阶段
     else if (state == Tracker::OK)
     {
         mnTracked = 0;
         mnTrackedVO = 0;
-        const float r = 5; // 标记方框的半径（边长的一半）
+        const float r = 5; // 矩形框半边长
         const int n = vCurrentKeys.size();
         
         for (int i = 0; i < n; i++)
         {
-            if (vbVO[i] || vbMap[i])
+            // 只要匹配到了地图点，或者有提取到特征点
+            if (vbMap[i] || vbVO[i])
             {
-                // 计算特征点四周方框的左上角与右下角坐标
                 cv::Point2f pt1(vCurrentKeys[i].pt.x - r, vCurrentKeys[i].pt.y - r);
                 cv::Point2f pt2(vCurrentKeys[i].pt.x + r, vCurrentKeys[i].pt.y + r);
 
-                // 匹配到 MapPoint (全局地图点)：绘制绿色矩形框 + 绿色实心圆
-                if (vbMap[i])
-                {
-                    cv::rectangle(im, pt1, pt2, cv::Scalar(0, 255, 0));
-                    cv::circle(im, vCurrentKeys[i].pt, 2, cv::Scalar(0, 255, 0), -1);
-                    mnTracked++;
-                }
-                // 匹配到 VO 临时点 (通常是没有被共视或新插入的点)：绘制蓝色矩形框 + 蓝色实心圆
-                else
-                {
-                    cv::rectangle(im, pt1, pt2, cv::Scalar(255, 0, 0));
-                    cv::circle(im, vCurrentKeys[i].pt, 2, cv::Scalar(255, 0, 0), -1);
-                    mnTrackedVO++;
-                }
+                // 绘制外层绿色矩形框 + 内部实心圆点
+                cv::rectangle(im, pt1, pt2, cv::Scalar(0, 255, 0), 1);
+                cv::circle(im, vCurrentKeys[i].pt, 1, cv::Scalar(0, 255, 0), -1);
+                mnTracked++;
+            }
+        }
+
+        // 如果目前 Tracker 还没跟踪上（Matches 为 0），默认将提取出的所有特征点都画上“方框+圆点”
+        if (mnTracked == 0) 
+        {
+            for (int i = 0; i < n; i++) 
+            {
+                cv::Point2f pt1(vCurrentKeys[i].pt.x - r, vCurrentKeys[i].pt.y - r);
+                cv::Point2f pt2(vCurrentKeys[i].pt.x + r, vCurrentKeys[i].pt.y + r);
+
+                cv::rectangle(im, pt1, pt2, cv::Scalar(0, 255, 0), 1);
+                cv::circle(im, vCurrentKeys[i].pt, 1, cv::Scalar(0, 255, 0), -1);
             }
         }
     }
 
-    // 3. 绘制底部的文字状态栏
     cv::Mat imWithInfo;
     DrawTextInfo(im, state, imWithInfo);
     return imWithInfo;
@@ -164,8 +160,8 @@ void FrameDrawer::Update(Tracker *pTracker)
 {
     std::unique_lock<std::mutex> lock(mMutex);
     
-    // 1. 拷贝当前帧图像和提取的 KeyPoints 关键点
-    pTracker->mCurrentFrame.mImGrayLeft.copyTo(mIm);
+    // 拷贝当前图像和特征点
+    pTracker->mImGray.copyTo(mIm);
     mvCurrentKeys = pTracker->mCurrentFrame.mvKeys;
     N = mvCurrentKeys.size();
     
@@ -173,7 +169,7 @@ void FrameDrawer::Update(Tracker *pTracker)
     mvbVO = std::vector<bool>(N, false);
     mvbMap = std::vector<bool>(N, false);
 
-    // 2. 如果跟踪正常，统计和归类每个特征点对应的地图点类型
+    // 统计和归类每个特征点对应的地图点类型
     if (pTracker->mState == Tracker::OK)
     {
         for (int i = 0; i < N; i++)
@@ -181,20 +177,15 @@ void FrameDrawer::Update(Tracker *pTracker)
             MapPoint* pMP = pTracker->mCurrentFrame.mvpMapPoints[i];
             if (pMP)
             {
-                // 过滤掉当前帧中的离群点/外点 (Outliers)
                 if (!pTracker->mCurrentFrame.mvbOutlier[i])
                 {
-                    // 观测数 > 0 表示属于建立好的全局 MapPoint（建图点）
-                    if (pMP->GetObservations().size() > 0)
-                        mvbMap[i] = true;
-                    // 否则视为临时 VO 点（里程计点）
-                    else
-                        mvbVO[i] = true;
+                    // 【修改点】：只要当前帧绑定了 MapPoint 并且不是 Outlier，就标记为地图点画框
+                    mvbMap[i] = true;
                 }
             }
         }
     }
     
-    // 3. 更新系统状态
     mState = static_cast<int>(pTracker->mState);
 }
+

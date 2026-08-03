@@ -41,7 +41,7 @@ public:
     // 当前帧与上一帧
     Frame mCurrentFrame;
     Frame mLastFrame;
-
+    cv::Mat mImGray;
 private:
     void Track();
     bool StereoInitialization();
@@ -54,7 +54,7 @@ private:
     System *mpSystem;
     std::shared_ptr<Map> mpMap;
     std::shared_ptr<Viewer> mpViewer;
-
+    
     LocalMapping *mpLocalMapper;
     // 特征提取器指针 (双目需要左右各一个 extractor)
     std::unique_ptr<ORBextractor> mpORBextractorLeft;

@@ -4,6 +4,7 @@
 #include <algorithm>
 #include "ORBextractor.h"
 #include "Map.h"
+
 // 静态变量初始化：保证每个关键帧生成的 ID 全局唯一递增
 long unsigned int KeyFrame::nNextId = 0;
 
@@ -322,4 +323,32 @@ std::vector<KeyFrame*> KeyFrame::GetConnectedKeyFrames()
         vKF.push_back(mit->first);
     }
     return vKF;
+}
+
+void KeyFrame::ComputeBoW()
+{
+    if(!mpORBvocabulary)
+    {
+        std::cerr << "[ERROR] KeyFrame::ComputeBoW(): mpORBvocabulary is nullptr!" << std::endl;
+        return;
+    }
+
+    if(mDescriptors.empty())
+    {
+        return;
+    }
+
+    if(mBowVec.empty())
+    {
+        // 将 cv::Mat 矩阵按行转换为 DBoW3 要求的 std::vector<cv::Mat>
+        std::vector<cv::Mat> vCurrentDesc;
+        vCurrentDesc.reserve(mDescriptors.rows);
+        for (int i = 0; i < mDescriptors.rows; i++)
+        {
+            vCurrentDesc.push_back(mDescriptors.row(i));
+        }
+
+        // 调用 DBoW3 的 transform 接口
+        mpORBvocabulary->transform(vCurrentDesc, mBowVec, mFeatVec, 4);
+    }
 }

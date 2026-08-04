@@ -7,7 +7,6 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_BUILD_TYPE "Debug")
 add_compile_options(-Wextra -Wpedantic -w)
 add_compile_options(-O3 -march=native)
-set(CMAKE_BUILD_TYPE Release)
 
 find_package(OpenCV REQUIRED)
 find_package(Ceres REQUIRED)
@@ -18,6 +17,7 @@ find_package(OpenGL REQUIRED)
 find_package(GLEW REQUIRED)
 find_package(g2o REQUIRED)
 find_package(fmt REQUIRED)
+find_package(DBoW3 REQUIRED)
 
 include_directories(
   src
@@ -28,6 +28,7 @@ include_directories(
   ${Sophus_INCLUDE_DIRS}
   ${PANGOLIN_INCLUDE_DIRS}
   ${OPENGL_INCLUDE_DIR}
+  ${DBow3_INCLUDE_DIRS}
 )
 
 add_library(${PROJECT_NAME}_lib
@@ -54,6 +55,7 @@ target_link_libraries(${PROJECT_NAME}_lib
   Sophus::Sophus
   pango_display        
   ${OPENGL_LIBRARIES}
+  ${DBoW3_LIBS}
   g2o_core                  
   g2o_stuff
   g2o_types_sba

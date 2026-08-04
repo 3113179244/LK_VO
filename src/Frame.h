@@ -6,11 +6,10 @@
 #include <opencv2/opencv.hpp>
 #include <Eigen/Core>
 #include <Eigen/Geometry>
-
+#include <DBoW3/DBoW3.h>
 class MapPoint;
 class ORBextractor;
-class ORBVocabulary;
-
+typedef DBoW3::Vocabulary ORBVocabulary;
 // 定义图像网格的行数和列数，用于将特征点分配到网格中，以加速局部特征匹配
 #define FRAME_GRID_ROWS 48
 #define FRAME_GRID_COLS 64
@@ -49,11 +48,13 @@ public:
     std::vector<size_t> GetFeaturesInArea(const float &x, const float &y, const float &r,
                                           const int minLevel = -1, const int maxLevel = -1) const;
 
+    // 计算 BoW 向量的函数
+    void ComputeBoW();
     // 全局静态变量，用于分配唯一的帧 ID
     static long unsigned int nNextId;
     long unsigned int mnId; // 当前帧的 ID
     double mTimeStamp;      // 时间戳
-    cv::Mat mImGrayLeft;    
+    cv::Mat mImGrayLeft;
     cv::Mat mImGrayRight;
     // 相机内参相关
     cv::Mat mK;
@@ -70,7 +71,8 @@ public:
 
     std::vector<float> mvuRight; // 左图特征点在右图中的匹配横坐标 (用于双目)
     std::vector<float> mvDepth;  // 左图特征点对应的深度值
-
+    DBoW3::BowVector mBowVec;
+    DBoW3::FeatureVector mFeatVec;
     // 地图点及外点标记
     std::vector<MapPoint *> mvpMapPoints; // 每个特征点关联的 3D 地图点 (若无关联则为空指针)
     std::vector<bool> mvbOutlier;         // 标记每个特征点对应的地图点是否被判断为外点 (Outlier)

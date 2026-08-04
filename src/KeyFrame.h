@@ -8,18 +8,17 @@
 #include <opencv2/opencv.hpp>
 #include <Eigen/Core>
 #include <Eigen/Geometry>
-
+#include <DBoW3/DBoW3.h>
 // 前向声明
 class Frame;
 class MapPoint;
 class Map;
-class ORBVocabulary;
-
+typedef DBoW3::Vocabulary ORBVocabulary;
 class KeyFrame
 {
 public:
     // 构造函数：根据当前普通帧 (Frame) 和所属地图 (Map) 构造关键帧
-    KeyFrame(Frame &F, Map* pMap);
+    KeyFrame(Frame &F, Map *pMap);
 
     // 位姿 (Pose) 相关函数
     // 设置相机到世界坐标系的变换矩阵 Tcw (Thread-safe)
@@ -37,35 +36,35 @@ public:
 
     // 共视图 (Covisibility Graph) 相关函数
     // 添加或更新与其他关键帧的连接关系及权重（权重通常是共视地图点的数量）
-    void AddConnection(KeyFrame* pKF, const int &weight);
+    void AddConnection(KeyFrame *pKF, const int &weight);
     // 删除与其他关键帧的连接关系
-    void EraseConnection(KeyFrame* pKF);
+    void EraseConnection(KeyFrame *pKF);
     // 重新计算并更新当前关键帧与所有其他关键帧的共视连接关系
     void UpdateConnections();
     // 更新共视权重排序，将共视程度最高的关键帧排在前面
     void UpdateBestCovisibles();
     // 获取权重（共视点数）大于指定值 w 的所有相连关键帧
-    std::vector<KeyFrame*> GetCovisibleByWeight(const int &w);
+    std::vector<KeyFrame *> GetCovisibleByWeight(const int &w);
     // 获取共视程度最高的前 N 个关键帧
-    std::vector<KeyFrame*> GetBestCovisibilityKeyFrames(const int &N);
+    std::vector<KeyFrame *> GetBestCovisibilityKeyFrames(const int &N);
     // 获取所有建立连接的关键帧
-    std::vector<KeyFrame*> GetConnectedKeyFrames();
+    std::vector<KeyFrame *> GetConnectedKeyFrames();
     // 获取当前关键帧与指定关键帧之间的共视权重
-    int GetWeight(KeyFrame* pKF);
+    int GetWeight(KeyFrame *pKF);
 
     // 地图点 (MapPoint) 相关函数
     // 为当前关键帧的第 idx 个特征点关联一个 3D 地图点
-    void AddMapPoint(MapPoint* pMP, const size_t &idx);
+    void AddMapPoint(MapPoint *pMP, const size_t &idx);
     // 解除第 idx 个特征点与地图点的绑定
     void EraseMapPointMatch(const size_t &idx);
     // 解除特定地图点与当前关键帧的绑定
-    void EraseMapPointMatch(MapPoint* pMP);
+    void EraseMapPointMatch(MapPoint *pMP);
     // 替换第 idx 个特征点关联的地图点（常用于闭环或局部建图的重复点融合）
-    void ReplaceMapPointMatch(const size_t &idx, MapPoint* pMP);
+    void ReplaceMapPointMatch(const size_t &idx, MapPoint *pMP);
     // 获取当前关键帧中所有特征点对应的地图点列表
-    std::vector<MapPoint*> GetMapPointMatches();
+    std::vector<MapPoint *> GetMapPointMatches();
     // 获取第 idx 个特征点对应的地图点
-    MapPoint* GetMapPoint(const size_t &idx);
+    MapPoint *GetMapPoint(const size_t &idx);
 
     // 词袋模型 (Bag of Words)
     // 计算当前关键帧的词袋向量，用于重定位和闭环检测
@@ -83,21 +82,24 @@ public:
     const cv::Mat mK; // 相机内参矩阵
 
     // 特征点与描述子
-    const int N;                               // 特征点总数
-    const std::vector<cv::KeyPoint> mvKeys;    // 原始提取的二维特征点
-    const std::vector<cv::KeyPoint> mvKeysUn;  // 去畸变后的二维特征点
-    const std::vector<float> mvuRight;         // 双目右图对应的横坐标 (若是单目则为负)
-    const std::vector<float> mvDepth;          // 对应的深度值
-    const cv::Mat mDescriptors;                // 特征点对应的描述子矩阵
+    const int N;                              // 特征点总数
+    const std::vector<cv::KeyPoint> mvKeys;   // 原始提取的二维特征点
+    const std::vector<cv::KeyPoint> mvKeysUn; // 去畸变后的二维特征点
+    const std::vector<float> mvuRight;        // 双目右图对应的横坐标 (若是单目则为负)
+    const std::vector<float> mvDepth;         // 对应的深度值
+    const cv::Mat mDescriptors;               // 特征点对应的描述子矩阵
 
     // 状态与图像金字塔参数
     bool mbBad; // 标记该关键帧是否已被剔除（如因冗余被 Local Mapping 线程删除）
 
-    int mnScaleLevels;                  // 图像金字塔的层数
-    float mfScaleFactor;                // 金字塔缩放因子
-    std::vector<float> mvScaleFactors;  // 各层级的缩放因子
-    std::vector<float> mvLevelSigma2;   // 各层级缩放因子的平方
-    std::vector<float> mvInvLevelSigma2;// 各层级缩放因子平方的倒数
+    int mnScaleLevels;                   // 图像金字塔的层数
+    float mfScaleFactor;                 // 金字塔缩放因子
+    std::vector<float> mvScaleFactors;   // 各层级的缩放因子
+    std::vector<float> mvLevelSigma2;    // 各层级缩放因子的平方
+    std::vector<float> mvInvLevelSigma2; // 各层级缩放因子平方的倒数
+
+    DBoW3::BowVector mBowVec;
+    DBoW3::FeatureVector mFeatVec;
 
 private:
     // 线程安全控制锁
@@ -113,16 +115,16 @@ private:
     Eigen::Matrix3f Rwc; // 旋转矩阵的逆 (相机 -> 世界)
 
     // 记录特征点关联的 3D 地图点（按特征点索引排列，空则为 nullptr）
-    std::vector<MapPoint*> mvpMapPoints;
+    std::vector<MapPoint *> mvpMapPoints;
 
     // 共视图 (Covisibility Graph) 数据结构
-    std::map<KeyFrame*, int> mConnectedKeyFrameWeights; // 记录相连的关键帧及其权重（共享的地图点数量）
-    std::vector<KeyFrame*> mvpOrderedConnectedKeyFrames;// 按权重降序排列的相连关键帧列表
-    std::vector<int> mvOrderedWeights;                  // 与上述列表对应的权重列表
+    std::map<KeyFrame *, int> mConnectedKeyFrameWeights;  // 记录相连的关键帧及其权重（共享的地图点数量）
+    std::vector<KeyFrame *> mvpOrderedConnectedKeyFrames; // 按权重降序排列的相连关键帧列表
+    std::vector<int> mvOrderedWeights;                    // 与上述列表对应的权重列表
 
     // 关联的地图指针与词典指针
-    Map* mpMap;
-    ORBVocabulary* mpORBvocabulary;
+    Map *mpMap;
+    ORBVocabulary *mpORBvocabulary;
 };
 
 #endif // KEYFRAME_H

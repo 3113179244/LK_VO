@@ -6,6 +6,7 @@
 #include "Config.h"
 #include <algorithm>   
 #include <limits> 
+
 long unsigned int Frame::nNextId = 0;
 bool Frame::mbInitialComputations = true;
 float Frame::fx = 0, Frame::fy = 0, Frame::cx = 0, Frame::cy = 0, Frame::invfx = 0, Frame::invfy = 0;
@@ -378,4 +379,31 @@ std::vector<size_t> Frame::GetFeaturesInArea(const float &x, const float &y, con
         }
     }
     return vIndices;
+}
+
+void Frame::ComputeBoW()
+{
+    if(!mpORBvocabulary)
+    {
+        std::cerr << "[ERROR] Frame::ComputeBoW(): mpORBvocabulary is nullptr!" << std::endl;
+        return;
+    }
+
+    if(mDescriptors.empty())
+    {
+        return;
+    }
+
+    if(mBowVec.empty())
+    {
+        // 转换格式适配 DBoW3
+        std::vector<cv::Mat> vCurrentDesc;
+        vCurrentDesc.reserve(mDescriptors.rows);
+        for (int i = 0; i < mDescriptors.rows; i++)
+        {
+            vCurrentDesc.push_back(mDescriptors.row(i));
+        }
+
+        mpORBvocabulary->transform(vCurrentDesc, mBowVec, mFeatVec, 4);
+    }
 }

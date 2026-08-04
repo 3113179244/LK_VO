@@ -13,7 +13,7 @@ int main(int argc, char **argv)
     // 设置默认路径
     std::string strConfigFile = "/home/wzj/Stereo_ORB_VO/config/KITTI04-12.yaml";
     std::string strSequenceDir = "/home/wzj/KITTI/data_odometry_gray/dataset/sequences/05";
-
+    std::string strVocFile = "/home/wzj/DBow3/orbvoc.dbow3";
     // 解析命令行参数
     if (argc >= 2)
     {
@@ -23,7 +23,10 @@ int main(int argc, char **argv)
     {
         strSequenceDir = argv[2];
     }
-
+    if (argc >= 4) 
+    {
+        strVocFile = argv[3];
+    }
     // 确保序列路径末尾有 '/'
     if (!strSequenceDir.empty() && strSequenceDir.back() != '/' && strSequenceDir.back() != '\\')
     {
@@ -61,7 +64,7 @@ int main(int argc, char **argv)
     std::cout << "  - 空格键 (Space): 暂停/恢复播放" << std::endl;
     std::cout << "  - Q 键           : 恢复播放" << std::endl;
     std::cout << "  - ESC 键         : 退出程序" << std::endl;
-    System SLAM(strConfigFile, System::STEREO, true);
+    System SLAM(strConfigFile, strVocFile, System::STEREO, true);
     int nFrameId = 0;
     bool bIsPaused = false;
     // 循环处理每一帧

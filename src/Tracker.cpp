@@ -11,8 +11,8 @@
 #include "ORBmatcher.h"
 #include "MotionOnlyBA.h"
 #include "LocalMapping.h"
-Tracker::Tracker(System *pSys, std::shared_ptr<Map> pMap, int sensor)
-    : mpSystem(pSys), mpMap(pMap), mState(NO_IMAGES_YET), mVelocity(Eigen::Matrix4f::Identity()), mpReferenceKF(nullptr), mpLocalMapper(nullptr)
+Tracker::Tracker(System *pSys, ORBVocabulary* pVoc, std::shared_ptr<Map> pMap, System::eSensor sensor)
+    : mpSystem(pSys), mpORBVocabulary(pVoc), mpMap(pMap), mState(NO_IMAGES_YET), mVelocity(Eigen::Matrix4f::Identity()), mpReferenceKF(nullptr), mpLocalMapper(nullptr)
 {
     // 从 Config 类中加载 ORB 提取器参数
     int nFeatures = Config::g_nORBnFeatures;
@@ -40,7 +40,7 @@ Eigen::Matrix4f Tracker::GrabImageStereo(const cv::Mat &imRectLeft, const cv::Ma
     // 实例化当前帧 (内部自动触发多线程特征提取 + 双目匹配计算深度)
     mCurrentFrame = Frame(imRectLeft, imRectRight, timestamp,
                           mpORBextractorLeft.get(), mpORBextractorRight.get(),
-                          nullptr, K, DistCoef, Config::g_dBf, Config::g_dThDepth);
+                          mpORBVocabulary, K, DistCoef, Config::g_dBf, Config::g_dThDepth);
     // 打印左右目图像的特征点，双目匹配成功点数
     // int nLeft = mCurrentFrame.mvKeys.size();
     // int nRight = mCurrentFrame.mvKeysRight.size();
@@ -215,16 +215,16 @@ bool Tracker::TrackWithMotionModel()
 
 bool Tracker::TrackReferenceKeyFrame()
 {
-    // 1. 假设初值继承上一帧位姿
+    // 假设初值继承上一帧位姿
     mCurrentFrame.SetPose(mLastFrame.mTcw);
 
-    // 2. 清空当前帧关联的地图点
+    // 清空当前帧关联的地图点
     mCurrentFrame.mvpMapPoints = std::vector<MapPoint*>(mCurrentFrame.N, static_cast<MapPoint*>(nullptr));
 
     if (!mpReferenceKF)
         return false;
 
-    // 3. 通过词袋模型 (BoW) 或描述子匹配参考关键帧与当前帧特征点
+    // 通过词袋模型 (BoW) 或描述子匹配参考关键帧与当前帧特征点
     ORBmatcher matcher(0.7, true);
     std::vector<MapPoint*> vpMapPointMatches;
     
@@ -243,10 +243,10 @@ bool Tracker::TrackReferenceKeyFrame()
         }
     }
 
-    // 4. 位姿优化 (Motion-Only BA)
+    // 位姿优化 (Motion-Only BA)
     int nInliers = MotionOnlyBA::Optimize(&mCurrentFrame);
 
-    // 5. 剔除外点
+    // 剔除外点
     for (int i = 0; i < mCurrentFrame.N; i++)
     {
         if (mCurrentFrame.mvpMapPoints[i] && mCurrentFrame.mvbOutlier[i])
@@ -263,7 +263,7 @@ bool Tracker::TrackReferenceKeyFrame()
 
 bool Tracker::TrackLocalMap()
 {
-    // 1. 搜集局部地图关键帧 (Local KeyFrames)
+    // 搜集局部地图关键帧 (Local KeyFrames)
     std::vector<KeyFrame*> vpLocalKeyFrames;
     
     // 将当前匹配点对应的 KeyFrame 以及共视 KeyFrames 放入局部关键帧列表
@@ -286,7 +286,7 @@ bool Tracker::TrackLocalMap()
     if (vpLocalKeyFrames.empty())
         return false;
 
-    // 2. 搜集局部地图点 (Local MapPoints) 并剔除已匹配的点
+    // 搜集局部地图点 (Local MapPoints) 并剔除已匹配的点
     std::vector<MapPoint*> vpLocalMapPoints;
     for (KeyFrame* pKF : vpLocalKeyFrames)
     {
@@ -302,7 +302,7 @@ bool Tracker::TrackLocalMap()
         }
     }
 
-    // 3. 将局部地图点投影到当前帧进行二次匹配
+    // 将局部地图点投影到当前帧进行二次匹配
     ORBmatcher matcher(0.8, true);
     int nMatches = 0;
 
@@ -367,10 +367,10 @@ bool Tracker::TrackLocalMap()
         }
     }
 
-    // 4. 第二次精细位姿优化 (Motion-Only BA)
+    // 第二次精细位姿优化 (Motion-Only BA)
     int nInliers = MotionOnlyBA::Optimize(&mCurrentFrame);
 
-    // 5. 更新内点标记并统计
+    // 更新内点标记并统计
     mnMatchesInliers = 0;
     for (int i = 0; i < mCurrentFrame.N; i++)
     {

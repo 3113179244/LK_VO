@@ -28,7 +28,7 @@ public:
         OK = 2,
         LOST = 3
     };
-    Tracker(System *pSys, std::shared_ptr<Map> pMap, int sensor);
+    Tracker(System *pSys, ORBVocabulary* pVoc, std::shared_ptr<Map> pMap, System::eSensor sensor);
     ~Tracker();
     void SetFrameDrawer(std::shared_ptr<FrameDrawer> pFrameDrawer) { mpFrameDrawer = pFrameDrawer; }
     // 图像数据Grab接口
@@ -54,7 +54,7 @@ private:
     System *mpSystem;
     std::shared_ptr<Map> mpMap;
     std::shared_ptr<Viewer> mpViewer;
-    
+    ORBVocabulary* mpORBVocabulary;
     LocalMapping *mpLocalMapper;
     // 特征提取器指针 (双目需要左右各一个 extractor)
     std::unique_ptr<ORBextractor> mpORBextractorLeft;

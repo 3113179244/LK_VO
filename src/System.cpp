@@ -5,7 +5,7 @@
 #include "Viewer.h"
 #include "FrameDrawer.h"
 #include "LocalMapping.h"
-System::System(const std::string &strConfigFile, const eSensor sensor, const bool bUseViewer)
+System::System(const std::string &strConfigFile, const std::string &strVocFile, const eSensor sensor, const bool bUseViewer)
     : mSensor(sensor), mpViewerThread(nullptr)
 {
     std::cout << "Starting ORB-SLAM2 Stereo System..." << std::endl;
@@ -16,17 +16,33 @@ System::System(const std::string &strConfigFile, const eSensor sensor, const boo
         std::cerr << "[System] Failed to load config file: " << strConfigFile << std::endl;
         return;
     }
+    mpVocabulary = std::make_shared<ORBVocabulary>();
+    std::cout << "Loading Vocabulary file from: " << strVocFile << " ..." << std::endl;
+    try
+    {
+        mpVocabulary->load(strVocFile);
+    }
+    catch (const std::exception &e)
+    {
+        std::cerr << "[System] Exception caught while loading vocabulary: " << e.what() << std::endl;
+        exit(-1);
+    }
 
+    if (mpVocabulary->empty())
+    {
+        std::cerr << "Failed to load vocabulary at: " << strVocFile << std::endl;
+        exit(-1);
+    }
+    std::cout << "Vocabulary loaded successfully." << std::endl;
     // 初始化全局地图 Map
     mpMap = std::make_shared<Map>();
     mpFrameDrawer = std::make_shared<FrameDrawer>(mpMap.get());
     // 初始化前端 Tracker
-    mpTracker = std::make_shared<Tracker>(this, mpMap, mSensor);
+    mpTracker = std::make_shared<Tracker>(this, mpVocabulary.get(), mpMap, mSensor);
     mpTracker->SetFrameDrawer(mpFrameDrawer);
     mpLocalMapper = std::make_shared<LocalMapping>(this, mpMap);
-    mpTracker->SetLocalMapper(mpLocalMapper.get());             
+    mpTracker->SetLocalMapper(mpLocalMapper.get());
     mpLocalMapper->SetTracker(mpTracker.get());
-    // 如果开启 Viewer 模式，启动 Pangolin 可视化线程
     if (bUseViewer)
     {
         mpViewer = std::make_shared<Viewer>(this, mpMap);

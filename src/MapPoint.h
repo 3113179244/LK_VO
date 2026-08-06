@@ -17,8 +17,6 @@ class MapPoint
 public:
     // 构造函数：已知空间位置、参考关键帧及所属地图
     MapPoint(const Eigen::Vector3f &Pos, KeyFrame* pRefKF, Map* pMap);
-    // 构造函数：已知空间位置、所属地图、参考关键帧及在该关键帧中提取的特征点索引
-    MapPoint(const Eigen::Vector3f &Pos, Map* pMap, KeyFrame* pRefKF, const int &idxF);
     
     // 设置和获取地图点在世界坐标系下的三维坐标
     void SetWorldPos(const Eigen::Vector3f &Pos);

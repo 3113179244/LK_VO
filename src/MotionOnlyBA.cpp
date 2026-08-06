@@ -182,11 +182,11 @@ int MotionOnlyBA::Optimize(Frame *pFrame)
 
         ceres::CostFunction *cost_function = nullptr;
 
-        if (pMP->isNear()) // 近点：视差大，平移可观 → 完整位姿优化（旋转+平移）
+        if (pFrame->isNear(i))
         {
             cost_function = ReprojectionError::Create(obs, P_w, K_eigen);
         }
-        else // 远点：视差小，平移不可观 → 仅旋转约束
+        else
         {
             cost_function = RotationOnlyError::Create(obs, P_w, K_eigen);
         }
@@ -228,7 +228,7 @@ int MotionOnlyBA::Optimize(Frame *pFrame)
 
     // 统计内点数量，并利用卡方检验(Chi-Square Test)筛选并标记外点(Outliers)
     int num_inliers = 0;
-    const double chi2_threshold = 5.991; // 自由度为 2 时，95% 置信度下的卡方检验阈值
+    const double chi2_threshold = 7.815; // 自由度为 2 时，95% 置信度下的卡方检验阈值
 
     for (int i = 0; i < N; ++i)
     {

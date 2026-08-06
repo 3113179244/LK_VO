@@ -47,7 +47,25 @@ public:
     // minLevel 和 maxLevel 用于限制提取特征点的金字塔层级
     std::vector<size_t> GetFeaturesInArea(const float &x, const float &y, const float &r,
                                           const int minLevel = -1, const int maxLevel = -1) const;
+    /**
+     * @brief 判断第 i 个特征点在当前帧视野下是否为近点 (Depth < mThDepth)
+     */
+    bool isNear(int i) const;
 
+    /**
+     * @brief 判断第 i 个特征点在当前帧视野下是否为远点 (Depth >= mThDepth)
+     */
+    bool isFar(int i) const;
+
+    /**
+     * @brief 根据地图点世界坐标，判断其相对于当前帧相机光心是否为近点
+     */
+    bool isMapPointNear(MapPoint* pMP) const;
+
+    /**
+     * @brief 根据地图点世界坐标，判断其相对于当前帧相机光心是否为远点
+     */
+    bool isMapPointFar(MapPoint* pMP) const;
     // 计算 BoW 向量的函数
     void ComputeBoW();
     // 全局静态变量，用于分配唯一的帧 ID

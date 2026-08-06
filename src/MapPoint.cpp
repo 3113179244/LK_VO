@@ -7,8 +7,8 @@ long unsigned int MapPoint::nNextId = 0;
 std::mutex MapPoint::mGlobalMutex;
 
 // 构造函数，初始化世界坐标、参考关键帧、地图、可见/匹配次数等，并将 bad 标志位置为 false
-MapPoint::MapPoint(const Eigen::Vector3f &Pos, KeyFrame* pRefKF, Map* pMap, bool bNear)
-    : mWorldPos(Pos), mpRefKF(pRefKF), mpMap(pMap), mnVisible(1), mnFound(1), mbBad(false), mbNear(bNear), mpReplaced(nullptr)
+MapPoint::MapPoint(const Eigen::Vector3f &Pos, KeyFrame* pRefKF, Map* pMap)
+    : mWorldPos(Pos), mpRefKF(pRefKF), mpMap(pMap), mnVisible(1), mnFound(1), mbBad(false), mpReplaced(nullptr)
 {
     mnId = nNextId++; // 赋予独立ID
     mNormalVector.setZero(); // 法向量初始化为0
@@ -295,14 +295,3 @@ float MapPoint::GetFoundRatio()
     return static_cast<float>(mnFound) / static_cast<float>(mnVisible);
 }
 
-void MapPoint::SetNear(bool bNear)
-{
-    std::unique_lock<std::mutex> lock(mMutexPos); 
-    mbNear = bNear;
-}
-
-bool MapPoint::isNear()
-{
-    std::unique_lock<std::mutex> lock(mMutexPos);
-    return mbNear;
-}

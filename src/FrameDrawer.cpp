@@ -179,7 +179,7 @@ void FrameDrawer::Update(Tracker *pTracker)
             {
                 if (!pTracker->mCurrentFrame.mvbOutlier[i])
                 {
-                    // 【修改点】：只要当前帧绑定了 MapPoint 并且不是 Outlier，就标记为地图点画框
+                    // 只要当前帧绑定了 MapPoint 并且不是 Outlier，就标记为地图点画框
                     mvbMap[i] = true;
                 }
             }

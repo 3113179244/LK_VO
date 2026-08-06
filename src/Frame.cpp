@@ -6,7 +6,7 @@
 #include "Config.h"
 #include <algorithm>   
 #include <limits> 
-
+#include "MapPoint.h"
 long unsigned int Frame::nNextId = 0;
 bool Frame::mbInitialComputations = true;
 float Frame::fx = 0, Frame::fy = 0, Frame::cx = 0, Frame::cy = 0, Frame::invfx = 0, Frame::invfy = 0;
@@ -406,4 +406,65 @@ void Frame::ComputeBoW()
 
         mpORBvocabulary->transform(vCurrentDesc, mBowVec, mFeatVec, 4);
     }
+}
+
+bool Frame::isNear(int i) const
+{
+    if (i < 0 || i >= N) return false;
+
+    // 优先使用当前帧已经算好的双目/RGBD深度值
+    float z = mvDepth[i];
+    if (z > 0.0f)
+    {
+        return z < mThDepth;
+    }
+
+    // 若当前特征点关联了地图点，但没有直接深度，则通过地图点与当前相机中心计算深度
+    if (mvpMapPoints[i])
+    {
+        return isMapPointNear(mvpMapPoints[i]);
+    }
+
+    return false;
+}
+
+bool Frame::isFar(int i) const
+{
+    if (i < 0 || i >= N) return false;
+
+    float z = mvDepth[i];
+    if (z > 0.0f)
+    {
+        return z >= mThDepth;
+    }
+
+    if (mvpMapPoints[i])
+    {
+        return isMapPointFar(mvpMapPoints[i]);
+    }
+
+    return false;
+}
+
+bool Frame::isMapPointNear(MapPoint* pMP) const
+{
+    if (!pMP || pMP->isBad()) return false;
+
+    // 计算地图点在当前相机坐标系下的坐标 P_c = R_cw * P_w + t_cw
+    Eigen::Vector3f P_w = pMP->GetWorldPos();
+    Eigen::Vector3f P_c = mRcw * P_w + mtcw;
+
+    // Z 轴深度大于0且小于远近点阈值即为近点
+    return (P_c.z() > 0.0f && P_c.z() < mThDepth);
+}
+
+bool Frame::isMapPointFar(MapPoint* pMP) const
+{
+    if (!pMP || pMP->isBad()) return false;
+
+    Eigen::Vector3f P_w = pMP->GetWorldPos();
+    Eigen::Vector3f P_c = mRcw * P_w + mtcw;
+
+    // Z 轴深度大于等于远近点阈值即为远点
+    return (P_c.z() >= mThDepth);
 }

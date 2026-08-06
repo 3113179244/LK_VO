@@ -140,7 +140,7 @@ bool Tracker::StereoInitialization()
         if (z > 0 && z < mCurrentFrame.mThDepth)
         {
             Eigen::Vector3f p3D = mCurrentFrame.UnprojectStereo(i);
-            MapPoint *pMP = new MapPoint(p3D, pKFinit, mpMap.get(), true);
+            MapPoint *pMP = new MapPoint(p3D, pKFinit, mpMap.get());
 
             // 建立 KeyFrame 和 MapPoint 的双向绑定
             pMP->AddObservation(pKFinit, i);
@@ -465,7 +465,7 @@ void Tracker::CreateNewKeyFrame()
             if (z > 0 && z < mCurrentFrame.mThDepth)
             {
                 Eigen::Vector3f p3D = mCurrentFrame.UnprojectStereo(i);
-                MapPoint *pNewMP = new MapPoint(p3D, pKF, mpMap.get(), true);
+                MapPoint *pNewMP = new MapPoint(p3D, pKF, mpMap.get());
 
                 pNewMP->AddObservation(pKF, i);
                 pKF->AddMapPoint(pNewMP, i);

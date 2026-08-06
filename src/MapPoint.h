@@ -16,7 +16,7 @@ class MapPoint
 {
 public:
     // 构造函数：已知空间位置、参考关键帧及所属地图
-    MapPoint(const Eigen::Vector3f &Pos, KeyFrame* pRefKF, Map* pMap, bool bNear = false);
+    MapPoint(const Eigen::Vector3f &Pos, KeyFrame* pRefKF, Map* pMap);
     
     // 设置和获取地图点在世界坐标系下的三维坐标
     void SetWorldPos(const Eigen::Vector3f &Pos);
@@ -49,8 +49,6 @@ public:
     void SetBadFlag();
     // 判断该地图点是否为坏点
     bool isBad();
-    void SetNear(bool bNear);
-    bool isNear();
     // 替换地图点（通常在闭环检测或局部建图融合重复点时调用），用传入的pMP替换当前点
     void Replace(MapPoint* pMP);    
     
@@ -74,7 +72,6 @@ public:
     
     // 标记与状态变量
     bool mbBad;               // 是否是坏点
-    bool mbNear;
     MapPoint* mpReplaced;     // 如果被替换，指向替换它的新地图点
     float mfMinDistance;      // 能够观测到该点的最小距离
     float mfMaxDistance;      // 能够观测到该点的最大距离

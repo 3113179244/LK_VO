@@ -159,8 +159,7 @@ int MotionOnlyBA::Optimize(Frame *pFrame)
     ceres::Problem problem;
     ceres::LossFunction *loss_function = new ceres::HuberLoss(1.0);
 
-    const double FAR_POINT_THRESHOLD = 20.0; // 远点阈值（距离超过20米认为平移不敏感）
-    int num_edges = 0;                        // 记录添加到问题中的有效边/残差块数量
+    int num_edges = 0; // 记录添加到问题中的有效边/残差块数量
 
     // 遍历当前帧的所有特征点及其对应的地图点，建立优化约束
     for (int i = 0; i < N; ++i)
@@ -183,14 +182,13 @@ int MotionOnlyBA::Optimize(Frame *pFrame)
 
         ceres::CostFunction *cost_function = nullptr;
 
-        // 根据深度选择合适残差块：远点仅优化旋转，近点同时优化旋转和平移
-        if (depth > FAR_POINT_THRESHOLD)
-        {
-            cost_function = RotationOnlyError::Create(obs, P_w, K_eigen);
-        }
-        else
+        if (pMP->isNear()) // 近点：视差大，平移可观 → 完整位姿优化（旋转+平移）
         {
             cost_function = ReprojectionError::Create(obs, P_w, K_eigen);
+        }
+        else // 远点：视差小，平移不可观 → 仅旋转约束
+        {
+            cost_function = RotationOnlyError::Create(obs, P_w, K_eigen);
         }
 
         // 向求解器问题中添加残差块
@@ -205,8 +203,8 @@ int MotionOnlyBA::Optimize(Frame *pFrame)
     // 配置 Ceres 求解器参数
     ceres::Solver::Options options;
     options.linear_solver_type = ceres::DENSE_QR; // 使用密集的 QR 分解求解线性系统
-    options.max_num_iterations = 10;               // 限制最大迭代次数为 10 次
-    options.minimizer_progress_to_stdout = false;  // 不在标准输出流中打印详细迭代进度
+    options.max_num_iterations = 10;              // 限制最大迭代次数为 10 次
+    options.minimizer_progress_to_stdout = false; // 不在标准输出流中打印详细迭代进度
 
     // 运行 Ceres 求解器开始优化
     ceres::Solver::Summary summary;

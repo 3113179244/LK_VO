@@ -11,6 +11,7 @@
 #include "ORBmatcher.h"
 #include "MotionOnlyBA.h"
 #include "LocalMapping.h"
+#include "Viewer.h"
 Tracker::Tracker(System *pSys, ORBVocabulary *pVoc, std::shared_ptr<Map> pMap, System::eSensor sensor)
     : mpSystem(pSys), mpORBVocabulary(pVoc), mpMap(pMap), mState(NO_IMAGES_YET), mVelocity(Eigen::Matrix4f::Identity()), mpReferenceKF(nullptr), mpLocalMapper(nullptr)
 {
@@ -105,6 +106,10 @@ void Tracker::Track()
             if (NeedNewKeyFrame())
             {
                 CreateNewKeyFrame();
+            }
+            if (mpViewer && mState == OK)
+            {
+                mpViewer->UpdateCurrentCameraPose(mCurrentFrame.mTcw);
             }
             mLastFrame = Frame(mCurrentFrame);
         }

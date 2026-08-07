@@ -72,6 +72,7 @@ void Tracker::Track()
         if (StereoInitialization())
         {
             mState = OK;
+            mLastFrame = Frame(mCurrentFrame); 
         }
     }
     // 阶段 B: 正常跟踪状态 -> 估计姿态 

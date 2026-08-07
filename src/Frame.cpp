@@ -40,6 +40,7 @@ Frame::Frame(const cv::Mat &imLeft, const cv::Mat &imRight, const double &timeSt
     mvKeysUn = mvKeys;
     mImGrayLeft = imLeft.clone();
     mImGrayRight = imRight.clone();
+    mb = mbf / mK.at<float>(0, 0);
     // 双目匹配，通过左右目特征点匹配计算视差，进而获得深度信息
     ComputeStereoMatches();
 
@@ -67,8 +68,6 @@ Frame::Frame(const cv::Mat &imLeft, const cv::Mat &imRight, const double &timeSt
         mbInitialComputations = false;
     }
 
-    // 计算物理基线长度 $b = \frac{bf}{f_x}$
-    mb = mbf / fx;
     // 将特征点划分到网格中，加速局部区域特征匹配搜索
     AssignFeaturesToGrid();
 }

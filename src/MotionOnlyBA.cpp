@@ -222,9 +222,10 @@ int MotionOnlyBA::Optimize(Frame *pFrame)
         opt_R = Eigen::AngleAxisd(angle, opt_r.normalized()).toRotationMatrix();
     }
 
-    // 将优化后的位姿更新更新回当前帧的 mTcw 矩阵，并显式强转为 float
-    pFrame->mTcw.block<3, 3>(0, 0) = opt_R.cast<float>();
-    pFrame->mTcw.block<3, 1>(0, 3) = opt_t.cast<float>();
+    Eigen::Matrix4f optimizedTcw = Eigen::Matrix4f::Identity();
+    optimizedTcw.block<3, 3>(0, 0) = opt_R.cast<float>();
+    optimizedTcw.block<3, 1>(0, 3) = opt_t.cast<float>();
+    pFrame->SetPose(optimizedTcw);
 
     // 统计内点数量，并利用卡方检验(Chi-Square Test)筛选并标记外点(Outliers)
     int num_inliers = 0;

@@ -11,7 +11,7 @@
 #include "ORBmatcher.h"
 #include "MotionOnlyBA.h"
 #include "LocalMapping.h"
-Tracker::Tracker(System *pSys, ORBVocabulary* pVoc, std::shared_ptr<Map> pMap, System::eSensor sensor)
+Tracker::Tracker(System *pSys, ORBVocabulary *pVoc, std::shared_ptr<Map> pMap, System::eSensor sensor)
     : mpSystem(pSys), mpORBVocabulary(pVoc), mpMap(pMap), mState(NO_IMAGES_YET), mVelocity(Eigen::Matrix4f::Identity()), mpReferenceKF(nullptr), mpLocalMapper(nullptr)
 {
     // 从 Config 类中加载 ORB 提取器参数
@@ -72,10 +72,10 @@ void Tracker::Track()
         if (StereoInitialization())
         {
             mState = OK;
-            mLastFrame = Frame(mCurrentFrame); 
+            mLastFrame = Frame(mCurrentFrame);
         }
     }
-    // 阶段 B: 正常跟踪状态 -> 估计姿态 
+    // 阶段 B: 正常跟踪状态 -> 估计姿态
     else
     {
         bool bOK = false;
@@ -106,10 +106,12 @@ void Tracker::Track()
             {
                 CreateNewKeyFrame();
             }
+            mLastFrame = Frame(mCurrentFrame);
         }
         else
         {
             mState = LOST;
+            mVelocity.setIdentity();
         }
         mLastFrame = Frame(mCurrentFrame);
     }
@@ -136,7 +138,7 @@ bool Tracker::StereoInitialization()
     for (int i = 0; i < mCurrentFrame.N; i++)
     {
         float z = mCurrentFrame.mvDepth[i];
-        
+
         // 筛选条件：深度必须大于 0 且小于近点阈值 (mThDepth)
         if (z > 0 && z < mCurrentFrame.mThDepth)
         {
@@ -220,15 +222,15 @@ bool Tracker::TrackReferenceKeyFrame()
     mCurrentFrame.SetPose(mLastFrame.mTcw);
 
     // 清空当前帧关联的地图点
-    mCurrentFrame.mvpMapPoints = std::vector<MapPoint*>(mCurrentFrame.N, static_cast<MapPoint*>(nullptr));
+    mCurrentFrame.mvpMapPoints = std::vector<MapPoint *>(mCurrentFrame.N, static_cast<MapPoint *>(nullptr));
 
     if (!mpReferenceKF)
         return false;
 
     // 通过词袋模型 (BoW) 或描述子匹配参考关键帧与当前帧特征点
     ORBmatcher matcher(0.7, true);
-    std::vector<MapPoint*> vpMapPointMatches;
-    
+    std::vector<MapPoint *> vpMapPointMatches;
+
     // 搜索参考关键帧 mpReferenceKF 在当前帧中的匹配点
     int nmatches = matcher.SearchByBoW(mpReferenceKF, mCurrentFrame, vpMapPointMatches);
 
@@ -252,7 +254,7 @@ bool Tracker::TrackReferenceKeyFrame()
     {
         if (mCurrentFrame.mvpMapPoints[i] && mCurrentFrame.mvbOutlier[i])
         {
-            mCurrentFrame.mvpMapPoints[i] = static_cast<MapPoint*>(nullptr);
+            mCurrentFrame.mvpMapPoints[i] = static_cast<MapPoint *>(nullptr);
             mCurrentFrame.mvbOutlier[i] = false;
         }
     }
@@ -265,17 +267,17 @@ bool Tracker::TrackReferenceKeyFrame()
 bool Tracker::TrackLocalMap()
 {
     // 搜集局部地图关键帧 (Local KeyFrames)
-    std::vector<KeyFrame*> vpLocalKeyFrames;
-    
+    std::vector<KeyFrame *> vpLocalKeyFrames;
+
     // 将当前匹配点对应的 KeyFrame 以及共视 KeyFrames 放入局部关键帧列表
     for (int i = 0; i < mCurrentFrame.N; i++)
     {
         if (mCurrentFrame.mvpMapPoints[i])
         {
-            MapPoint* pMP = mCurrentFrame.mvpMapPoints[i];
+            MapPoint *pMP = mCurrentFrame.mvpMapPoints[i];
             if (!pMP->isBad())
             {
-                const std::map<KeyFrame*, size_t> observations = pMP->GetObservations();
+                const std::map<KeyFrame *, size_t> observations = pMP->GetObservations();
                 for (auto mit = observations.begin(); mit != observations.end(); mit++)
                 {
                     vpLocalKeyFrames.push_back(mit->first);
@@ -284,17 +286,21 @@ bool Tracker::TrackLocalMap()
         }
     }
 
+    std::sort(vpLocalKeyFrames.begin(), vpLocalKeyFrames.end());
+    vpLocalKeyFrames.erase(std::unique(vpLocalKeyFrames.begin(), vpLocalKeyFrames.end()), vpLocalKeyFrames.end());
+
     if (vpLocalKeyFrames.empty())
         return false;
 
     // 搜集局部地图点 (Local MapPoints) 并剔除已匹配的点
-    std::vector<MapPoint*> vpLocalMapPoints;
-    for (KeyFrame* pKF : vpLocalKeyFrames)
+    std::vector<MapPoint *> vpLocalMapPoints;
+    for (KeyFrame *pKF : vpLocalKeyFrames)
     {
-        std::vector<MapPoint*> vpMPs = pKF->GetMapPointMatches();
-        for (MapPoint* pMP : vpMPs)
+        std::vector<MapPoint *> vpMPs = pKF->GetMapPointMatches();
+        for (MapPoint *pMP : vpMPs)
         {
-            if (!pMP || pMP->isBad()) continue;
+            if (!pMP || pMP->isBad())
+                continue;
             // 避免重复添加
             if (std::find(vpLocalMapPoints.begin(), vpLocalMapPoints.end(), pMP) == vpLocalMapPoints.end())
             {
@@ -307,9 +313,10 @@ bool Tracker::TrackLocalMap()
     ORBmatcher matcher(0.8, true);
     int nMatches = 0;
 
-    for (MapPoint* pMP : vpLocalMapPoints)
+    for (MapPoint *pMP : vpLocalMapPoints)
     {
-        if (pMP->isBad()) continue;
+        if (pMP->isBad())
+            continue;
 
         // 检查该地图点是否已在当前帧匹配过
         bool bAlreadyFound = false;
@@ -322,13 +329,15 @@ bool Tracker::TrackLocalMap()
             }
         }
 
-        if (bAlreadyFound) continue;
+        if (bAlreadyFound)
+            continue;
 
         // 将地图点投影到当前帧像素平面
         Eigen::Vector3f P_w = pMP->GetWorldPos();
-        Eigen::Vector3f P_c = mCurrentFrame.GetRotationInverse().transpose() * P_w + mCurrentFrame.mTcw.block<3,1>(0,3);
+        Eigen::Vector3f P_c = mCurrentFrame.GetRotationInverse().transpose() * P_w + mCurrentFrame.mTcw.block<3, 1>(0, 3);
 
-        if (P_c[2] <= 0) continue; // 剔除相机后方的点
+        if (P_c[2] <= 0)
+            continue; // 剔除相机后方的点
 
         // 计算投影像素坐标
         float u = Frame::fx * P_c[0] / P_c[2] + Frame::cx;
@@ -339,14 +348,16 @@ bool Tracker::TrackLocalMap()
 
         // 在投影区域 (半径 5~10 像素) 内查找的最佳描述子点
         std::vector<size_t> vIndices = mCurrentFrame.GetFeaturesInArea(u, v, 5.0f);
-        if (vIndices.empty()) continue;
+        if (vIndices.empty())
+            continue;
 
         int bestDist = 255;
         int bestIdx = -1;
 
         for (size_t idx : vIndices)
         {
-            if (mCurrentFrame.mvpMapPoints[idx]) continue; // 该像素特征点已有匹配
+            if (mCurrentFrame.mvpMapPoints[idx])
+                continue; // 该像素特征点已有匹配
 
             // 比对描述子距离
             cv::Mat dMP = pMP->GetDescriptor();
@@ -379,7 +390,7 @@ bool Tracker::TrackLocalMap()
         {
             if (mCurrentFrame.mvbOutlier[i])
             {
-                mCurrentFrame.mvpMapPoints[i] = static_cast<MapPoint*>(nullptr);
+                mCurrentFrame.mvpMapPoints[i] = static_cast<MapPoint *>(nullptr);
                 mCurrentFrame.mvbOutlier[i] = false;
             }
             else
@@ -457,7 +468,7 @@ void Tracker::CreateNewKeyFrame()
     // 遍历当前帧特征点：为新增的未跟踪点创建 MapPoint，为已跟踪点追加 Observation
     for (int i = 0; i < mCurrentFrame.N; i++)
     {
-        MapPoint* pMP = mCurrentFrame.mvpMapPoints[i];
+        MapPoint *pMP = mCurrentFrame.mvpMapPoints[i];
 
         if (!pMP)
         {

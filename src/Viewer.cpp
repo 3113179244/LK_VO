@@ -147,23 +147,28 @@ void Viewer::Run()
 // 绘制运动轨迹（连线路径）
 void Viewer::DrawTrajectory()
 {
-    if (!mpMap)
-        return;
+    if (!mpMap) return;
 
     const std::vector<KeyFrame *> &vpKFs = mpMap->GetAllKeyFrames();
-    if (vpKFs.size() < 2)
-        return;
+    if (vpKFs.size() < 2) return;
 
+    // 1. 只保留有效关键帧，并按时间 ID 排序，确保连线按时间先后
+    std::vector<KeyFrame *> vSorted;
+    vSorted.reserve(vpKFs.size());
+    for (KeyFrame *pKF : vpKFs) {
+        if (!pKF || pKF->mbBad)      // 跳过坏关键帧
+            continue;
+        vSorted.push_back(pKF);
+    }
+    std::sort(vSorted.begin(), vSorted.end(),
+              [](KeyFrame *a, KeyFrame *b) { return a->mnId < b->mnId; });
+    if (vSorted.size() < 2) return;
+
+    // 2. 用 GL_LINE_STRIP 按时间顺序连线
     glLineWidth(2.0f);
     glColor3f(0.0f, 1.0f, 0.0f); // 绿色轨迹线
-
     glBegin(GL_LINE_STRIP);
-    for (size_t i = 0; i < vpKFs.size(); i++)
-    {
-        KeyFrame *pKF = vpKFs[i];
-        if (!pKF)
-            continue;
-
+    for (KeyFrame *pKF : vSorted) {
         Eigen::Vector3f Ow = pKF->GetCameraCenter();
         glVertex3f(Ow.x(), Ow.y(), Ow.z());
     }

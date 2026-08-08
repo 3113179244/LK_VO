@@ -70,6 +70,16 @@ public:
     // 计算当前关键帧的词袋向量，用于重定位和闭环检测
     void ComputeBoW();
     void SetBadFlag();
+    std::vector<size_t> GetFeaturesInArea(const float &x, const float &y, const float &r,
+                                          const int minLevel = -1, const int maxLevel = -1) const;
+    // 网格划分相关参数（每个关键帧独立，用于加速局部特征投影匹配）
+    static const int mnGridCols = 64; // 或复用 FRAME_GRID_COLS
+    static const int mnGridRows = 48;
+    float mfGridElementWidthInv;
+    float mfGridElementHeightInv;
+    float mnMinX, mnMaxX, mnMinY, mnMaxY;
+    std::vector<std::size_t> mGrid[64][48]; // 二维网格，存特征点索引
+    
     // 基础标识与时间戳
     static long unsigned int nNextId;  // 静态全局变量，用于生成下一个关键帧的唯一ID
     long unsigned int mnId;            // 当前关键帧的唯一ID
@@ -102,6 +112,10 @@ public:
     DBoW3::FeatureVector mFeatVec;
 
 private:
+    // 将特征点分配到网格
+    void AssignFeaturesToGrid();
+    // 判断特征点是否在网格内并返回网格坐标
+    bool PosInGrid(const cv::KeyPoint &kp, int &posX, int &posY);
     // 线程安全控制锁
     std::mutex mMutexPose;        // 保护相机位姿读写的互斥锁
     std::mutex mMutexConnections; // 保护共视图连接关系读写的互斥锁

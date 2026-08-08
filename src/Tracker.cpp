@@ -413,56 +413,41 @@ bool Tracker::NeedNewKeyFrame()
 {
     bool bLocalMappingIdle = mpLocalMapper->SetNotStop();
 
-    // 统计当前帧跟踪到的有效地图点 (Inliers)
-    int nMinMatches = 15;
-    if (mnMatchesInliers < nMinMatches)
-        return false; // 跟踪到的点太少，位姿可能不可靠，不建帧
+    // 跟踪到的点太少，位姿不可靠，不建帧
+    if (mnMatchesInliers < 15)
+        return false;
 
-    // 计算参考关键帧中被跟踪到的地图点数量
+    // 参考关键帧中被跟踪到的点数量
     int nRefMatches = 0;
     if (mpReferenceKF)
     {
-        // 统计参考关键帧中有效的地图点总数
-        std::vector<MapPoint *> vpRefMPs = mpReferenceKF->GetMapPointMatches();
+        const std::vector<MapPoint *> vpRefMPs = mpReferenceKF->GetMapPointMatches();
         for (size_t i = 0; i < vpRefMPs.size(); i++)
-        {
             if (vpRefMPs[i] && !vpRefMPs[i]->isBad())
                 nRefMatches++;
-        }
     }
 
-    // 判断时间/帧数间隔条件
-    const bool c1a = mCurrentFrame.mnId >= mnLastKeyFrameId + 20; // 距离上一关键帧已过去 20 帧以上 (强制插入)
-    const bool c1b = mCurrentFrame.mnId >= mnLastKeyFrameId + 2;  // 至少间隔 2 帧以上 (防止过度密集)
-
-    // 判断视角变化/地图点重复度条件
-    // 如果当前帧跟踪到的地图点数低于参考关键帧的 90%，说明观测到了较多新场景，需要插入关键帧
-    bool c2 = false;
-    if (nRefMatches > 0)
-    {
-        float ratioMatches = static_cast<float>(mnMatchesInliers) / static_cast<float>(nRefMatches);
-        c2 = ratioMatches < 0.90f;
-    }
-
-    // 即使共视比例较高，若新增了足够多的视觉近点，也需要及时插入以提供好的三角化基线
+    // 近点统计
     int nNonTrackedClose = 0;
     for (int i = 0; i < mCurrentFrame.N; i++)
     {
         if (mCurrentFrame.mvDepth[i] > 0 && mCurrentFrame.mvDepth[i] < mCurrentFrame.mThDepth)
-        {
             if (!mCurrentFrame.mvpMapPoints[i] || mCurrentFrame.mvbOutlier[i])
                 nNonTrackedClose++;
-        }
-    }
-    bool c3 = (nNonTrackedClose > 100); // 发现大量未被跟踪的新近点
-
-    // 综合决策逻辑
-    if ((c1a || (c1b && c2) || c3) && bLocalMappingIdle)
-    {
-        return true;
     }
 
-    return false;
+    // -- ORB-SLAM2 风格的三条条件 --
+    // c1a: 距上次关键帧超过 20 帧 → 强制插入
+    const bool c1a = mCurrentFrame.mnId >= mnLastKeyFrameId + 20;
+    // c1b: 距上次关键帧超过 2 帧 且 LocalMapping 空闲 → 插入（主要持续来源）
+    const bool c1b = (mCurrentFrame.mnId >= mnLastKeyFrameId + 2 && bLocalMappingIdle);
+    // c2: 跟踪比跌破参考关键帧的 0.75 → 插入
+    const bool c2 = (nRefMatches > 0 &&
+                     static_cast<float>(mnMatchesInliers) / static_cast<float>(nRefMatches) < 0.75f);
+    // c3: 跟踪点少且近点大量未跟踪 → 插入（提供三角化基线）
+    const bool c3 = (mnMatchesInliers < 50 && nNonTrackedClose > 70);
+
+    return (c1a || c1b || c2 || c3);
 }
 
 void Tracker::CreateNewKeyFrame()

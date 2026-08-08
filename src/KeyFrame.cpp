@@ -24,6 +24,12 @@ KeyFrame::KeyFrame(Frame &F, Map *pMap)
     mnId = nNextId++;             // 分配新的关键帧 ID
     mvpMapPoints = F.mvpMapPoints;// 继承普通帧中已经匹配好的 3D 地图点
     SetPose(F.mTcw);              // 设置关键帧的初始位姿
+
+    // ⚠️ 重要修复：必须在构造函数中初始化特征点网格。
+    // 否则 SearchInNeighbors()/CreateNewMapPoints() 依赖的
+    // GetFeaturesInArea() 会用未初始化的垃圾网格数据，
+    // 导致投影/融合永远搜不到候选特征点（"看起来没起作用"）。
+    AssignFeaturesToGrid();
 }
 
 // 线程安全地设置位姿，并同步更新旋转、平移以及相机光心坐标
@@ -367,12 +373,14 @@ void KeyFrame::ComputeBoW()
 
 void KeyFrame::AssignFeaturesToGrid()
 {
-    // 图像边界：用图像宽高（这里从特征点和 mK 推导）
-    // 更稳健做法：图像宽度 = 2*cx, 高度 = 2*cy（对标准内参成立）
-    mnMinX = 0.0f; mnMinY = 0.0f;
-    mnMaxX = 2.0f * cx; mnMaxY = 2.0f * cy;
-    mfGridElementWidthInv  = static_cast<float>(FRAME_GRID_COLS) / (mnMaxX - mnMinX);
-    mfGridElementHeightInv = static_cast<float>(FRAME_GRID_ROWS) / (mnMaxY - mnMinY);
+    // 修正图像边界来源：直接使用普通帧已经计算好的去畸变图像边界
+    // （Frame::ComputeImageBounds 用真实的 imLeft.cols/rows 设定，位于图像网格内）。
+    // 之前用 2.0f*cx / 2.0f*cy 推导会导致主点 cx != cols/2 时边界不准确，
+    // 使图像边缘的特征点被漏搜。
+    mnMinX = Frame::mnMinX; mnMinY = Frame::mnMinY;
+    mnMaxX = Frame::mnMaxX; mnMaxY = Frame::mnMaxY;
+    mfGridElementWidthInv  = static_cast<float>(mnGridCols) / (mnMaxX - mnMinX);
+    mfGridElementHeightInv = static_cast<float>(mnGridRows) / (mnMaxY - mnMinY);
 
     // 预分配
     for (unsigned int i = 0; i < FRAME_GRID_COLS; i++)

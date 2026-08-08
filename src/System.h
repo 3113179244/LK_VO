@@ -6,6 +6,7 @@
 #include <memory>
 #include <mutex>
 #include <thread>
+#include <vector>
 #include <opencv2/opencv.hpp>
 #include <Eigen/Core>
 #include <DBoW3/DBoW3.h>
@@ -42,6 +43,21 @@ public:
     // 数据获取接口
     std::shared_ptr<Map> GetMap() const { return mpMap; }
 
+    // 保存关键帧轨迹（KITTI 格式，每行 12 个浮点数：T_wc = [R_wc | t_wc] 行优先展平）
+    // 供 evo 等工具评估，可直接与 KITTI ground truth 对比。
+    void SaveKeyFrameTrajectoryKITTI(const std::string &filename);
+
+    // 保存每一帧轨迹（KITTI 格式，每行 12 个浮点数：T_wc = [R_wc | t_wc] 行优先展平）
+    // 注意：这是「逐帧」轨迹，行数与序列图像帧数一致，可与 KITTI ground truth 逐行对齐，
+    //       避免「关键帧轨迹」因行数 != 真值行数而导致的 evo 对齐报错。
+    void SaveFrameTrajectoryKITTI(const std::string &filename);
+    // 清空已记录的逐帧轨迹（Reset 时调用以保证不残留旧序列数据）
+    void ClearFrameTrajectory();
+
+    // 保存关键帧轨迹（TUM 格式，每行: timestamp tx ty tz qx qy qz qw，带时间戳）
+    // evo 按时间戳自动对齐，不要求与真值行数相同，评估更稳健。
+    void SaveKeyFrameTrajectoryTUM(const std::string &filename);
+
 private:
     eSensor mSensor;
     std::shared_ptr<ORBVocabulary> mpVocabulary;
@@ -54,6 +70,10 @@ private:
     std::shared_ptr<FrameDrawer> mpFrameDrawer;
     // 线程安全互斥锁
     std::mutex mMutexMode;
+    // 逐帧轨迹记录（顺序与序列帧一致，保存 T_wc 相机在世界坐标系下的位姿）
+    // 方案C：区别于「关键帧轨迹」，该容器记录每一帧的位姿，行数与图像帧数一致，
+    //        从而与 KITTI ground truth 逐行对齐评估。
+    std::vector<Eigen::Matrix4f> mvFrameTrajectory;
 };
 
 #endif // SYSTEM_H

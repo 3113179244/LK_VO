@@ -4,8 +4,9 @@
 #include "KeyFrame.h"
 #include "MapPoint.h"
 #include "Tracker.h"
-#include "ORBmatcher.h"       
+#include "ORBmatcher.h"
 #include "ORBextractor.h"
+#include "Optimizer.h"
 #include <Eigen/SVD>
 #include <unistd.h>
 #include <algorithm>
@@ -37,8 +38,10 @@ static double ComputeParallax(const Eigen::Vector3f &a, const Eigen::Vector3f &b
     if (va.norm() < 1e-8 || vb.norm() < 1e-8)
         return 0.0;
     double cosA = va.dot(vb) / (va.norm() * vb.norm());
-    if (cosA > 1.0) cosA = 1.0;
-    if (cosA < -1.0) cosA = -1.0;
+    if (cosA > 1.0)
+        cosA = 1.0;
+    if (cosA < -1.0)
+        cosA = -1.0;
     return acos(cosA) * 180.0 / M_PI;
 }
 
@@ -54,9 +57,10 @@ static float CheckDistEpipolarLine(const KeyFrame *pKF1, const KeyFrame *pKF2,
     Eigen::Vector3f p1(kp1.pt.x, kp1.pt.y, 1.0f);
     Eigen::Vector3f p2(kp2.pt.x, kp2.pt.y, 1.0f);
 
-    Eigen::Vector3f l2 = F12 * p1;             
+    Eigen::Vector3f l2 = F12 * p1;
     float sq = l2(0) * l2(0) + l2(1) * l2(1);
-    if (sq < 1e-10f) return 1e6f;
+    if (sq < 1e-10f)
+        return 1e6f;
     float dist = std::fabs(p2.dot(l2)) / std::sqrt(sq);
     return dist;
 }
@@ -76,15 +80,15 @@ static Eigen::Matrix3f ComputeFundamentalMatrix(const Eigen::Matrix3f &R1,
     // 本质矩阵 E = [t12]_x * R12
     Eigen::Matrix3f tx;
     tx << 0, -t12(2), t12(1),
-          t12(2), 0, -t12(0),
-         -t12(1), t12(0), 0;
+        t12(2), 0, -t12(0),
+        -t12(1), t12(0), 0;
     Eigen::Matrix3f E = tx * R12;
 
     // 内参矩阵 K 及其逆
     Eigen::Matrix3f K;
     K << fx, 0, cx,
-         0, fy, cy,
-         0,  0,  1;
+        0, fy, cy,
+        0, 0, 1;
     Eigen::Matrix3f Kinv = K.inverse();
 
     // F = K^-T * E * K^-1
@@ -101,9 +105,11 @@ static bool Triangulate(const Eigen::Matrix3f &R1, const Eigen::Vector3f &t1,
 {
     // 第一相机坐标系下的位姿
     Eigen::Matrix4f T1 = Eigen::Matrix4f::Identity();
-    T1.block<3,3>(0,0) = R1; T1.block<3,1>(0,3) = t1;
+    T1.block<3, 3>(0, 0) = R1;
+    T1.block<3, 1>(0, 3) = t1;
     Eigen::Matrix4f T2 = Eigen::Matrix4f::Identity();
-    T2.block<3,3>(0,0) = R2; T2.block<3,1>(0,3) = t2;
+    T2.block<3, 3>(0, 0) = R2;
+    T2.block<3, 1>(0, 3) = t2;
 
     // 构建 DLT 系数矩阵（4 个方程，最小二乘）
     Eigen::Matrix4f A = Eigen::Matrix4f::Zero();
@@ -150,8 +156,9 @@ void LocalMapping::Run()
             // 4. 融合邻近关键帧中重复的 MapPoints
             SearchInNeighbors();
 
-            // 5. 执行 Local BA 优化 (这里可调用 Optimizer::LocalBundleAdjustment)
-            // if (!CheckNewKeyFrames()) { Optimizer::LocalBundleAdjustment(mpCurrentKeyFrame, mpMap); }
+            // 5. 执行局部 BA 优化
+            if (!CheckNewKeyFrames())
+                Optimizer::LocalBundleAdjustment(mpMap);
 
             // 6. 剔除冗余的关键帧（如果某关键帧 90% 以上的地图点能被其他至少3个关键帧看到）
             KeyFrameCulling();
@@ -343,7 +350,7 @@ void LocalMapping::CreateNewMapPoints()
             for (size_t c = 0; c < vCandidates.size(); c++)
             {
                 const size_t j = vCandidates[c];
-                if (vpMapPoints2[j])   // 邻居帧该点已有地图点，跳过（避免重复建）
+                if (vpMapPoints2[j]) // 邻居帧该点已有地图点，跳过（避免重复建）
                     continue;
 
                 const cv::Mat &d2 = Desc2.row(j);
@@ -374,12 +381,12 @@ void LocalMapping::CreateNewMapPoints()
 
             // 像素距离阈值：依据特征尺度放大
             const float sigma2 = mpCurrentKeyFrame->mvLevelSigma2[level0];
-            const float epipolarTh = 3.841f * sigma2;   // 单目时用 3.84
+            const float epipolarTh = 3.841f * sigma2; // 单目时用 3.84
             if (distEpipolar > epipolarTh)
                 continue;
 
             // --- 三角化 ---
-            Eigen::Vector2f xpi0(kp0.pt.x, kp0.pt.y);   // 已含内参，直接作为归一化观测（近似）
+            Eigen::Vector2f xpi0(kp0.pt.x, kp0.pt.y); // 已含内参，直接作为归一化观测（近似）
             Eigen::Vector2f xpi2(pKF2->mvKeysUn[bestIdx2].pt.x,
                                  pKF2->mvKeysUn[bestIdx2].pt.y);
 
@@ -411,7 +418,7 @@ void LocalMapping::CreateNewMapPoints()
             const float errU = u0 - kp0.pt.x;
             const float errV = v0 - kp0.pt.y;
             const float reprojErr = errU * errU + errV * errV;
-            if (reprojErr > 5.991f * sigma2)    // 2 自由度卡方阈值
+            if (reprojErr > 5.991f * sigma2) // 2 自由度卡方阈值
                 continue;
 
             // 在邻居帧同样检查重投影
@@ -426,7 +433,7 @@ void LocalMapping::CreateNewMapPoints()
             const Eigen::Vector3f ray2 = (x3D - Ow2).normalized();
             const double parallax = ComputeParallax(ray0, ray2);
             // 近点需要更大视差角，远点允许更小；这里给一个保守下限
-            if (parallax < 1.0)    // 小于1度视为纯旋转/退化，跳过
+            if (parallax < 1.0) // 小于1度视为纯旋转/退化，跳过
                 continue;
 
             // --- 通过所有检查，创建新的地图点 ---
@@ -462,9 +469,9 @@ void LocalMapping::SearchInNeighbors()
         return;
 
     // 2. 收集一、二级邻居的全部地图点（作为融合候选），并记录一级邻居
-    std::vector<KeyFrame *> vpTargetKFs;        // 需要更新连接关系的关键帧集合
-    std::set<MapPoint *> vpFuseCandidates;      // 邻居的地图点（用于与当前帧融合）
-    const int nn2 = 5;                          // 每个一级邻居取多少二级邻居
+    std::vector<KeyFrame *> vpTargetKFs;   // 需要更新连接关系的关键帧集合
+    std::set<MapPoint *> vpFuseCandidates; // 邻居的地图点（用于与当前帧融合）
+    const int nn2 = 5;                     // 每个一级邻居取多少二级邻居
 
     // 当前关键帧自己的地图点
     std::vector<MapPoint *> vpLocalMapPoints = mpCurrentKeyFrame->GetMapPointMatches();
